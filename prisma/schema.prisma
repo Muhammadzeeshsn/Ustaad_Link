@@ -1,0 +1,202 @@
+// ---------- Generator & Datasource ----------
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+enum Role {
+  ADMIN
+  STUDENT
+  TUTOR
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  PENDING
+}
+
+enum RequestType {
+  HIRE_TUTOR
+  HIRE_QURAN
+  PROJECT_HELP
+}
+
+enum Mode {
+  ONLINE
+  ONSITE
+  HYBRID
+}
+
+enum RequestStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  SHORTLISTED
+  REJECTED
+  FORWARDED_TO_STUDENT
+  ACCEPTED_BY_STUDENT
+  DECLINED_BY_STUDENT
+}
+
+enum AssignmentStatus {
+  PENDING_TUTOR_ACCEPT
+  ACCEPTED
+  REJECTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TutorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ---------- Core Models ----------
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  hashedPassword String
+  role           Role       @default(STUDENT)
+  status         UserStatus @default(PENDING)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  student StudentProfile?
+  tutor   TutorProfile?
+
+  // Relations (implicit backrefs):
+  // requests (as student) via Request.student
+  // applications (as tutor) via Application.tutor
+  // assignments (as tutor) via Assignment.tutor
+  Request                Request[]
+  Application            Application[]
+  Assignment             Assignment[]
+  EmailVerificationToken EmailVerificationToken[]
+}
+
+model StudentProfile {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String?
+  phone     String?
+  location  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TutorProfile {
+  userId          String      @id
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String?
+  bio             String?
+  subjects        String[]
+  experienceYears Int?
+  status          TutorStatus @default(PENDING)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Request {
+  id        String @id @default(cuid())
+  studentId String
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  type        RequestType
+  status      RequestStatus @default(PENDING_REVIEW)
+
+  subject       String?
+  classLevel    String?
+  mode          Mode?
+  preferredTime String?
+  location      String?
+  budgetMin     Int?
+  budgetMax     Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications Application[]
+  assignment   Assignment?
+}
+
+model Application {
+  id        String @id @default(cuid())
+  requestId String
+  tutorId   String
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  tutor   User    @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+
+  coverLetter String?
+  price       Int?
+  status      ApplicationStatus @default(SUBMITTED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requestId])
+  @@index([tutorId])
+}
+
+model Assignment {
+  id        String @id @default(cuid())
+  requestId String @unique
+  tutorId   String
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  tutor   User    @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+
+  status    AssignmentStatus @default(PENDING_TUTOR_ACCEPT)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([tutorId])
+}
+
+// Optional: Courses page
+model Course {
+  id             String   @id @default(cuid())
+  title          String
+  description    String?
+  type           String
+  level          String?
+  mode           String?
+  duration_weeks Int?
+  price          Int?
+  cover_url      String?
+  seats          Int?
+  is_published   Boolean  @default(false)
+  created_at     DateTime @default(now())
+  tags           String[]
+}
+
+// Email verification tokens for /api/auth/verify-email
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
