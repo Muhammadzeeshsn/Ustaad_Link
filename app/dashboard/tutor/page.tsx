@@ -1,18 +1,18 @@
-//app/dashboard/tutor/page.tsx
+// app/dashboard/tutor/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useToast } from '@/hooks/use-toast'
-import { fadeUp, stagger, slideCard } from '@/lib/motion'
-
+import { useToast } from '@/components/ui/use-toast'
+import { fadeUp } from '@/lib/motion'
 import {
-  Users, Calendar, Star, Award, Bell, LogOut, ClipboardList, Home, Briefcase, User, CheckCircle, RefreshCw,
+  Users, Star, Award, ClipboardList, Home, Briefcase, User, LogOut, RefreshCw
 } from 'lucide-react'
 
 /* ───────────── Types (aligned with our API) ───────────── */
@@ -47,9 +47,19 @@ type ApplicationRow = {
 
 /* ───────────── Utils ───────────── */
 
-const fetcher = (u: string) =>
-  fetch(u, { credentials: 'include' }).then(r => r.json())
-
+const fetcher = async (u: string) => {
+  const res = await fetch(u, { credentials: 'include' })
+  const raw = await res.text().catch(() => '')
+  let data: any = null
+  try { data = raw ? JSON.parse(raw) : null } catch { /* not JSON */ }
+  if (!res.ok) {
+    const err: any = new Error((data?.error || data?.message || raw || res.statusText) ?? 'Request failed')
+    err.status = res.status
+    err.data = data
+    throw err
+  }
+  return data
+}
 
 const popCard = {
   initial: { scale: 0.985, opacity: 0 },
@@ -71,37 +81,67 @@ const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateStr
 /* ───────────── Page ───────────── */
 
 export default function TutorDashboardPage() {
+  const router = useRouter()
   const { toast } = useToast()
   const [tab, setTab] = useState<'requests' | 'proposals'>('requests')
 
-  const { data: meRes, error: meErr } = useSWR<{ data: TutorProfile } | { error: string }>(
+  // Me
+  const {
+    data: meRes,
+    error: meErr,
+    isLoading: meLoading,
+  } = useSWR<{ data: TutorProfile }>(
     '/api/tutors/me',
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
   )
-  const { data: openRes, isLoading: loadingOpen, mutate: refetchOpen } = useSWR<
-    { data: RequestRow[] } | { error: string }
-  >('/api/tutor/requests/open', fetcher)
 
-  const { data: appsRes, isLoading: loadingApps, mutate: refetchApps } = useSWR<
-    { data: ApplicationRow[] } | { error: string }
-  >('/api/applications', fetcher)
+  // Open requests
+  const {
+    data: openRes,
+    error: openErr,
+    isLoading: loadingOpen,
+    mutate: refetchOpen,
+  } = useSWR<{ data: RequestRow[] }>(
+    '/api/tutor/requests/open',
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
+  )
 
-  const profile: TutorProfile | null = (meRes && 'data' in meRes ? meRes.data : null) ?? null
-  const openRequests: RequestRow[] = (openRes && 'data' in openRes ? openRes.data : []) ?? []
-  const applications: ApplicationRow[] = (appsRes && 'data' in appsRes ? appsRes.data : []) ?? []
+  // Applications
+  const {
+    data: appsRes,
+    error: appsErr,
+    isLoading: loadingApps,
+    mutate: refetchApps,
+  } = useSWR<{ data: ApplicationRow[] }>(
+    '/api/applications',
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
+  )
+
+  const unauthorized = (meErr as any)?.status === 401
+  const forbidden = (meErr as any)?.status === 403
+
+  const profile: TutorProfile | null = meRes?.data ?? null
+  const openRequests: RequestRow[] = openRes?.data ?? []
+  const applications: ApplicationRow[] = appsRes?.data ?? []
 
   useEffect(() => {
     document.title = 'Tutor Dashboard | UstaadLink'
   }, [])
 
+  // Redirect to login if not authenticated
   useEffect(() => {
-    if (meErr) window.location.href = '/auth'
-  }, [meErr])
+    if (unauthorized) {
+      router.replace('/auth?callbackUrl=/dashboard/tutor')
+    }
+  }, [unauthorized, router])
 
   async function handleSignOut() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
-      window.location.href = '/'
+      router.replace('/')
     } catch {
       toast({ title: 'Error signing out', description: 'Please try again.' })
     }
@@ -118,7 +158,7 @@ export default function TutorDashboardPage() {
           coverLetter: 'I would like to help with this request.',
         }),
       })
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Failed to apply')
       toast({ title: 'Application submitted', description: 'Pending admin review.' })
       refetchApps()
@@ -127,10 +167,46 @@ export default function TutorDashboardPage() {
     }
   }
 
-  if (!profile && !meErr) {
+  // Loading & guards (no infinite spinner)
+  if (meLoading) {
     return (
       <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
         Loading…
+      </div>
+    )
+  }
+
+  if (unauthorized) {
+    return (
+      <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
+        Redirecting to sign in…
+      </div>
+    )
+  }
+
+  if (forbidden) {
+    return (
+      <div className="min-h-[60vh] grid place-items-center">
+        <Card className="max-w-md rounded-2xl">
+          <CardContent className="py-10 text-center">
+            <div className="mb-2 text-lg font-semibold">Not a tutor account</div>
+            <p className="text-sm text-muted-foreground">
+              Please switch to a tutor account or contact support.
+            </p>
+            <div className="mt-4 flex justify-center gap-2">
+              <Button onClick={() => router.replace('/dashboard/student')}>Go to student dashboard</Button>
+              <Button variant="outline" onClick={() => router.replace('/auth')}>Sign in</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
+        Tutor profile not found.
       </div>
     )
   }
@@ -192,6 +268,13 @@ export default function TutorDashboardPage() {
 
               {loadingOpen ? (
                 <SkeletonGrid />
+              ) : openErr ? (
+                <EmptyBlock
+                  title="Could not load requests"
+                  desc="Please try again in a moment."
+                  actionLabel="Retry"
+                  onAction={() => refetchOpen()}
+                />
               ) : openRequests.length ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {openRequests.map((r) => (
@@ -243,6 +326,13 @@ export default function TutorDashboardPage() {
 
               {loadingApps ? (
                 <SkeletonGrid />
+              ) : appsErr ? (
+                <EmptyBlock
+                  title="Could not load applications"
+                  desc="Please try again in a moment."
+                  actionLabel="Retry"
+                  onAction={() => refetchApps()}
+                />
               ) : applications.length ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {applications.map((p) => (

@@ -74,20 +74,28 @@ model User {
   hashedPassword String
   role           Role       @default(STUDENT)
   status         UserStatus @default(PENDING)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
 
+  // Helpful for Auth.js
+  name          String?
+  image         String?
+  emailVerified DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Profiles
   student StudentProfile?
   tutor   TutorProfile?
 
-  // Relations (implicit backrefs):
-  // requests (as student) via Request.student
-  // applications (as tutor) via Application.tutor
-  // assignments (as tutor) via Assignment.tutor
+  // Relations (implicit backrefs in your previous code style)
   Request                Request[]
   Application            Application[]
   Assignment             Assignment[]
   EmailVerificationToken EmailVerificationToken[]
+
+  // Auth.js relations
+  accounts Account[]
+  sessions Session[]
 }
 
 model StudentProfile {
@@ -135,6 +143,8 @@ model Request {
 
   applications Application[]
   assignment   Assignment?
+
+  @@index([studentId])
 }
 
 model Application {
@@ -199,4 +209,44 @@ model EmailVerificationToken {
 
   @@index([userId])
   @@index([token])
+}
+
+// -------- Auth.js (NextAuth) tables --------
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }

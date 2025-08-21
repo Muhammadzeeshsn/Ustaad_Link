@@ -58,6 +58,7 @@ export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
 
+
       {/* HERO */}
       <header className="relative isolate overflow-hidden bg-[#0b1631] text-white">
         {/* optional subtle image overlay */}

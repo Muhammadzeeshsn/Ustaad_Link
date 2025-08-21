@@ -1,16 +1,18 @@
+// app/dashboard/student/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { motion } from 'framer-motion'
+import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useToast } from '@/hooks/use-toast'
+import { useToast } from '@/components/ui/use-toast'
 import { Plus, BookOpen, Users, LogOut, ClipboardList, ChevronRight } from 'lucide-react'
-import { fadeUp, stagger, slideCard } from '@/lib/motion'
-
+import { fadeUp } from '@/lib/motion'
+import { swrFetcher } from '@/lib/swr'   // ← use throwing fetcher
 
 type RequestType = 'HIRE_TUTOR' | 'HIRE_QURAN' | 'PROJECT_HELP' | string
 type RequestStatus = 'pending_review' | 'approved' | 'rejected' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | string
@@ -29,7 +31,6 @@ type RequestRow = {
 type StudentProfile = { userId: string; name: string; phone?: string | null; location?: string | null }
 
 const popCard = { initial: { scale: 0.985, opacity: 0 }, animate: { scale: 1, opacity: 1, transition: { duration: 0.25 } } }
-const fetcher = (u: string) => fetch(u, { credentials: 'include' }).then(r => r.json())
 
 function statusBadgeClasses(status: string) {
   switch (status) {
@@ -56,14 +57,25 @@ export default function StudentDashboardPage() {
   const { toast } = useToast()
   const [tab, setTab] = useState<'requests' | 'assignments'>('requests')
 
-  const { data: meRes, error: meErr } = useSWR<{ data: StudentProfile } | { error: string }>('/api/students/me', fetcher)
-  const { data: reqRes, isLoading: loadingReqs } = useSWR<{ data: RequestRow[] } | { error: string }>('/api/requests', fetcher)
+  // role-gate
+  const { data: session, status } = useSession()
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      window.location.href = '/auth'
+    } else if (status === 'authenticated' && (session?.user as any)?.role !== 'STUDENT') {
+      window.location.href = '/dashboard/tutor'
+    }
+  }, [status, session])
 
-  const profile: StudentProfile | null = (meRes && 'data' in meRes ? meRes.data : null) ?? null
-  const requests: RequestRow[] = (reqRes && 'data' in reqRes ? reqRes.data : []) ?? []
+  const { data: meRes, error: meErr, isLoading: meLoading } = useSWR<{ data: StudentProfile }>('/api/students/me', swrFetcher)
+  const { data: reqRes, error: reqErr, isLoading: loadingReqs } =
+    useSWR<{ data: RequestRow[] }>('/api/requests', swrFetcher)
 
   useEffect(() => { document.title = 'Student Dashboard | UstaadLink' }, [])
-  useEffect(() => { if (meErr) window.location.href = '/auth' }, [meErr])
+  useEffect(() => { if (meErr) toast({ title: 'Error', description: meErr.message, variant: 'destructive' }) }, [meErr, toast])
+
+  const profile: StudentProfile | null = meRes?.data ?? null
+  const requests: RequestRow[] = reqRes?.data ?? []
 
   const profilePct = useMemo(() => computeProfileCompletion(profile), [profile])
   const activeAssignments = useMemo(() => requests.filter(r => ['assigned', 'in_progress'].includes(r.status)), [requests])
@@ -77,8 +89,11 @@ export default function StudentDashboardPage() {
     }
   }
 
-  if (!profile && !meErr) {
+  if (meLoading) {
     return <div className="min-h-[60vh] grid place-items-center text-muted-foreground">Loading…</div>
+  }
+  if (meErr || !profile) {
+    return <div className="min-h-[60vh] grid place-items-center text-muted-foreground">Could not load profile.</div>
   }
 
   return (
@@ -160,6 +175,8 @@ export default function StudentDashboardPage() {
 
               {loadingReqs ? (
                 <SkeletonList />
+              ) : reqErr ? (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{(reqErr as any)?.message || 'Failed to load requests.'}</div>
               ) : requests.length ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {requests.map((r) => (
@@ -195,27 +212,6 @@ export default function StudentDashboardPage() {
               <h2 className="text-xl font-semibold">Active Tutoring Sessions</h2>
               {loadingReqs ? (
                 <SkeletonList />
-              ) : activeAssignments.length ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {activeAssignments.map((a) => (
-                    <motion.div key={a.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="transform-gpu">
-                      <Card className="overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl">
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-lg">{a.title}</CardTitle>
-                            <Badge className={statusBadgeClasses(a.status)}>{toLabel(a.status)}</Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex items-center justify-between">
-                            <Badge variant="outline">{toLabel(a.type)}</Badge>
-                            <div className="text-xs text-muted-foreground">Started {formatDate(a.createdAt)}</div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </div>
               ) : (
                 <EmptyStateCard title="No active tutoring sessions" description="Your approved/assigned requests will appear here" />
               )}

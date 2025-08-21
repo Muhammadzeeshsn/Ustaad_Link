@@ -1,10 +1,8 @@
 // app/layout.tsx
 import type { Metadata } from 'next'
-import './globals.css'
-import Providers from './providers'
+import './../globals.css'
+import Providers from './../providers'
 import { Toaster } from '@/components/ui/toaster'
-import { Navbar } from '@/components/layout/Navbar'
-import { Footer } from '@/components/layout/Footer'
 
 export const metadata: Metadata = {
   title: 'UstaadLink',
@@ -16,14 +14,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <Providers>
-          <Navbar />
+
           {children}
           <Toaster />
-          <Footer />
-        </Providers>
 
-        {/* Stable mount point for toast portals (optional but recommended) */}
-        <div id="toast-root" />
+        </Providers>
       </body>
     </html>
   )
