@@ -92,6 +92,7 @@ model User {
   Application            Application[]
   Assignment             Assignment[]
   EmailVerificationToken EmailVerificationToken[]
+  EmailToken             EmailToken[]        // ← added relation to new model
 
   // Auth.js relations
   accounts Account[]
@@ -209,6 +210,19 @@ model EmailVerificationToken {
 
   @@index([userId])
   @@index([token])
+}
+
+// 🔐 Generic email tokens (used by your tokens.ts helpers)
+model EmailToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  type      String   // e.g. "verify" | "reset"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([tokenHash, type, expiresAt])
 }
 
 // -------- Auth.js (NextAuth) tables --------

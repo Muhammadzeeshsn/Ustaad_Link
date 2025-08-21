@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Footer />
         </Providers>
 
-        {/* Stable mount point for toast portals (optional but recommended) */}
+        {/* stable mount point for toast portal (harmless if unused) */}
         <div id="toast-root" />
       </body>
     </html>

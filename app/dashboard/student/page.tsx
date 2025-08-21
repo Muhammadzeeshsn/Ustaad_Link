@@ -60,12 +60,10 @@ export default function StudentDashboardPage() {
   // role-gate
   const { data: session, status } = useSession()
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      window.location.href = '/auth'
-    } else if (status === 'authenticated' && (session?.user as any)?.role !== 'STUDENT') {
-      window.location.href = '/dashboard/tutor'
-    }
-  }, [status, session])
+  if (status === 'authenticated' && (session?.user as any)?.role !== 'STUDENT') {
+    window.location.href = '/dashboard/tutor'
+  }
+}, [status, session])
 
   const { data: meRes, error: meErr, isLoading: meLoading } = useSWR<{ data: StudentProfile }>('/api/students/me', swrFetcher)
   const { data: reqRes, error: reqErr, isLoading: loadingReqs } =

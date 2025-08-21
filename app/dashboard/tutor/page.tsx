@@ -2,7 +2,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -10,9 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { fadeUp } from '@/lib/motion'
+import { fadeUp, stagger, slideCard } from '@/lib/motion'
+import { swrFetcher } from '@/lib/swr'
+
 import {
-  Users, Star, Award, ClipboardList, Home, Briefcase, User, LogOut, RefreshCw
+  Users, Calendar, Star, Award, Bell, LogOut, ClipboardList, Home, Briefcase, User, CheckCircle, RefreshCw,
 } from 'lucide-react'
 
 /* ───────────── Types (aligned with our API) ───────────── */
@@ -47,20 +48,6 @@ type ApplicationRow = {
 
 /* ───────────── Utils ───────────── */
 
-const fetcher = async (u: string) => {
-  const res = await fetch(u, { credentials: 'include' })
-  const raw = await res.text().catch(() => '')
-  let data: any = null
-  try { data = raw ? JSON.parse(raw) : null } catch { /* not JSON */ }
-  if (!res.ok) {
-    const err: any = new Error((data?.error || data?.message || raw || res.statusText) ?? 'Request failed')
-    err.status = res.status
-    err.data = data
-    throw err
-  }
-  return data
-}
-
 const popCard = {
   initial: { scale: 0.985, opacity: 0 },
   animate: { scale: 1, opacity: 1, transition: { duration: 0.25 } },
@@ -81,67 +68,50 @@ const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateStr
 /* ───────────── Page ───────────── */
 
 export default function TutorDashboardPage() {
-  const router = useRouter()
   const { toast } = useToast()
   const [tab, setTab] = useState<'requests' | 'proposals'>('requests')
 
-  // Me
-  const {
-    data: meRes,
-    error: meErr,
-    isLoading: meLoading,
-  } = useSWR<{ data: TutorProfile }>(
-    '/api/tutors/me',
-    fetcher,
-    { revalidateOnFocus: false, shouldRetryOnError: false }
-  )
+  // Use throwing SWR fetcher (sets error on 401/403)
+  const { data: meRes, error: meErr, isLoading: meLoading } =
+    useSWR<{ data: TutorProfile } | { error: string }>('/api/tutors/me', swrFetcher)
 
-  // Open requests
   const {
     data: openRes,
     error: openErr,
     isLoading: loadingOpen,
     mutate: refetchOpen,
-  } = useSWR<{ data: RequestRow[] }>(
+  } = useSWR<{ data: RequestRow[] } | { error: string }>(
     '/api/tutor/requests/open',
-    fetcher,
-    { revalidateOnFocus: false, shouldRetryOnError: false }
+    swrFetcher
   )
 
-  // Applications
   const {
     data: appsRes,
     error: appsErr,
     isLoading: loadingApps,
     mutate: refetchApps,
-  } = useSWR<{ data: ApplicationRow[] }>(
+  } = useSWR<{ data: ApplicationRow[] } | { error: string }>(
     '/api/applications',
-    fetcher,
-    { revalidateOnFocus: false, shouldRetryOnError: false }
+    swrFetcher
   )
 
-  const unauthorized = (meErr as any)?.status === 401
-  const forbidden = (meErr as any)?.status === 403
-
-  const profile: TutorProfile | null = meRes?.data ?? null
-  const openRequests: RequestRow[] = openRes?.data ?? []
-  const applications: ApplicationRow[] = appsRes?.data ?? []
+  const profile: TutorProfile | null =
+    (meRes && 'data' in meRes ? meRes.data : null) ?? null
+  const openRequests: RequestRow[] =
+    (openRes && 'data' in openRes ? openRes.data : []) ?? []
+  const applications: ApplicationRow[] =
+    (appsRes && 'data' in appsRes ? appsRes.data : []) ?? []
 
   useEffect(() => {
     document.title = 'Tutor Dashboard | UstaadLink'
   }, [])
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (unauthorized) {
-      router.replace('/auth?callbackUrl=/dashboard/tutor')
-    }
-  }, [unauthorized, router])
+  // NOTE: removed auto-redirect on meErr to avoid portal teardown during nav
 
   async function handleSignOut() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
-      router.replace('/')
+      window.location.href = '/'
     } catch {
       toast({ title: 'Error signing out', description: 'Please try again.' })
     }
@@ -158,7 +128,7 @@ export default function TutorDashboardPage() {
           coverLetter: 'I would like to help with this request.',
         }),
       })
-      const json = await res.json().catch(() => ({}))
+      const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Failed to apply')
       toast({ title: 'Application submitted', description: 'Pending admin review.' })
       refetchApps()
@@ -167,35 +137,20 @@ export default function TutorDashboardPage() {
     }
   }
 
-  // Loading & guards (no infinite spinner)
-  if (meLoading) {
-    return (
-      <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
-        Loading…
-      </div>
-    )
-  }
-
-  if (unauthorized) {
-    return (
-      <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
-        Redirecting to sign in…
-      </div>
-    )
-  }
-
-  if (forbidden) {
+  // Unauthorized / session missing (401/403) → show a friendly card, no auto-redirect
+  if (meErr || (meRes && 'error' in meRes)) {
     return (
       <div className="min-h-[60vh] grid place-items-center">
         <Card className="max-w-md rounded-2xl">
           <CardContent className="py-10 text-center">
-            <div className="mb-2 text-lg font-semibold">Not a tutor account</div>
+            <div className="mb-2 text-lg font-semibold">Session required</div>
             <p className="text-sm text-muted-foreground">
-              Please switch to a tutor account or contact support.
+              Please sign in as a <strong>tutor</strong> to access the dashboard.
             </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <Button onClick={() => router.replace('/dashboard/student')}>Go to student dashboard</Button>
-              <Button variant="outline" onClick={() => router.replace('/auth')}>Sign in</Button>
+            <div className="mt-4 flex justify-center">
+              <Button onClick={() => (window.location.href = '/auth?callbackUrl=/dashboard/tutor')}>
+                Go to sign in
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -203,10 +158,11 @@ export default function TutorDashboardPage() {
     )
   }
 
-  if (!profile) {
+  // True loading state while the /me request is in flight
+  if (meLoading) {
     return (
       <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
-        Tutor profile not found.
+        Loading…
       </div>
     )
   }
@@ -268,13 +224,6 @@ export default function TutorDashboardPage() {
 
               {loadingOpen ? (
                 <SkeletonGrid />
-              ) : openErr ? (
-                <EmptyBlock
-                  title="Could not load requests"
-                  desc="Please try again in a moment."
-                  actionLabel="Retry"
-                  onAction={() => refetchOpen()}
-                />
               ) : openRequests.length ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {openRequests.map((r) => (
@@ -326,13 +275,6 @@ export default function TutorDashboardPage() {
 
               {loadingApps ? (
                 <SkeletonGrid />
-              ) : appsErr ? (
-                <EmptyBlock
-                  title="Could not load applications"
-                  desc="Please try again in a moment."
-                  actionLabel="Retry"
-                  onAction={() => refetchApps()}
-                />
               ) : applications.length ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {applications.map((p) => (

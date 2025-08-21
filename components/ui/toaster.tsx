@@ -16,7 +16,7 @@ import { useToast } from './use-toast'
 export function Toaster() {
   const { toasts } = useToast()
 
-  // Mount on client & bind to a stable DOM node
+  // Mount only on client and bind to a stable DOM node
   const [host, setHost] = React.useState<HTMLElement | null>(null)
   React.useEffect(() => {
     setHost(document.getElementById('toast-root'))
