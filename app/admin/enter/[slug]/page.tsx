@@ -1,11 +1,16 @@
+// app/admin/enter/[slug]/page.tsx
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import crypto from 'crypto'
-import { sendMail } from '@/app/lib/mail' // keep your existing mail helper
+import { sendMail } from '@/app/lib/mail'
+
+import SecretForm from './SecretForm.client'
+import OtpForm from './OtpForm.client'
+
 
 type Props = {
   params: { slug: string }
-  searchParams?: { step?: string; error?: string; prompt?: string }
+  searchParams?: { step?: string; error?: string; prompt?: string; ecode?: string }
 }
 
 /* ---------- tiny signed-token helpers for OTP cookie ---------- */
@@ -39,25 +44,24 @@ function parseToken(token: string, secret: string): any | null {
   }
 }
 
-/* ---------- page ---------- */
 export default function AdminEntryPage({ params, searchParams }: Props) {
   const expectedSlug = process.env.ADMIN_ENTRY_SLUG ?? 'sltech'
   const expectedCode = process.env.ADMIN_ENTRY_CODE ?? 'letmein'
   const adminEmail = process.env.ADMIN_EMAIL
   const otpSecret =
     process.env.ADMIN_OTP_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'fallback'
-  const gateTtlSeconds = Number(process.env.ADMIN_GATE_TTL_SECONDS ?? '300') // 5 minutes default
+  const gateTtlSeconds = Number(process.env.ADMIN_GATE_TTL_SECONDS ?? '300') // 5 min
 
   const c = cookies()
   const gate = c.get('admin-gate')?.value
   const otpCookie = c.get('admin-otp')?.value
 
-  /* Already passed? Only auto-redirect if no explicit ?prompt=1 */
+  // Already passed? Only auto-redirect if no explicit ?prompt=1
   if (gate === expectedSlug && !searchParams?.prompt) {
     redirect('/admin')
   }
 
-  /* Validate OTP cookie up-front; clear if invalid/expired */
+  // Validate OTP cookie; clear if invalid/expired so we fall back to secret
   let otpIsValid = false
   if (otpCookie) {
     const parsed = parseToken(otpCookie, otpSecret)
@@ -71,7 +75,6 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
     ) {
       otpIsValid = true
     } else {
-      // clear bad/expired cookie so we show the secret screen again
       c.set('admin-otp', '', { path: '/', maxAge: 0 })
     }
   }
@@ -81,26 +84,23 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
       ? 'otp'
       : 'secret'
   const err = searchParams?.error
+  const ecode = searchParams?.ecode
 
   /* ---------- server action: start (secret -> send OTP) ---------- */
   async function start(formData: FormData) {
     'use server'
     const code = (formData.get('code') || '').toString().trim()
 
-    // slug must match
     if (params.slug !== expectedSlug) {
       redirect('/auth?admin=1')
     }
-    // secret must match
     if (code !== expectedCode) {
       redirect(`/admin/enter/${params.slug}?error=secret`)
     }
-    // email must be configured
     if (!adminEmail) {
       redirect(`/admin/enter/${params.slug}?error=mail`)
     }
 
-    // generate OTP & short-lived signed cookie
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString()
     const salt = crypto.randomBytes(8).toString('hex')
     const hash = sha256(`${otp}:${salt}`)
@@ -115,7 +115,6 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
       maxAge: 5 * 60,
     })
 
-    // send the mail; if it fails, clear otp and report
     try {
       await sendMail({
         to: adminEmail!,
@@ -129,10 +128,10 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
         `,
         text: `Your admin OTP is ${otp} (valid for 5 minutes).`,
       })
-    } catch (e) {
-      // ensure we do not trap user on OTP screen with a broken state
+    } catch (e: any) {
       cookies().set('admin-otp', '', { path: '/', maxAge: 0 })
-      redirect(`/admin/enter/${params.slug}?error=mail`)
+      const code = e?.code || e?.responseCode || e?.name || 'MAIL'
+      redirect(`/admin/enter/${params.slug}?error=mail&ecode=${encodeURIComponent(String(code))}`)
     }
 
     redirect(`/admin/enter/${params.slug}?step=otp`)
@@ -151,11 +150,7 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
       cookies().set('admin-otp', '', { path: '/', maxAge: 0 })
       redirect(`/admin/enter/${params.slug}?error=expired`)
     }
-    const { hash, salt, exp } = parsed as {
-      hash: string
-      salt: string
-      exp: number
-    }
+    const { hash, salt, exp } = parsed as { hash: string; salt: string; exp: number }
     if (Date.now() > exp) {
       cookies().set('admin-otp', '', { path: '/', maxAge: 0 })
       redirect(`/admin/enter/${params.slug}?error=expired`)
@@ -165,24 +160,23 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
       redirect(`/admin/enter/${params.slug}?step=otp&error=otp`)
     }
 
-    // success: set short-lived admin gate (5 min default) & clear otp
+    // success: short-lived gate & clear otp
     cookies().set('admin-gate', expectedSlug, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      maxAge: gateTtlSeconds, // expires in ~5 minutes unless you refresh it elsewhere
+      maxAge: gateTtlSeconds,
     })
     cookies().set('admin-otp', '', { path: '/', maxAge: 0 })
 
     redirect('/admin')
   }
 
-  /* ---------- server action: resend OTP (regenerates cookie) ---------- */
+  /* ---------- server action: resend OTP ---------- */
   async function resend() {
     'use server'
     const token = cookies().get('admin-otp')?.value
-    // Only allow resend if there is a valid, unexpired OTP flow in progress
     if (!token) {
       redirect(`/admin/enter/${params.slug}`)
     }
@@ -227,7 +221,6 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
     redirect(`/admin/enter/${params.slug}?step=otp`)
   }
 
-  /* ---------- UI (minimal) ---------- */
   return (
     <main className="min-h-screen grid place-items-center bg-background px-4">
       <div className="w-full max-w-md rounded-2xl border bg-card shadow-sm p-6">
@@ -238,6 +231,7 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
             : 'We emailed a 6-digit code. Enter it below to continue.'}
         </p>
 
+        {/* Errors */}
         {err === 'secret' && (
           <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             Invalid secret. Please try again.
@@ -255,61 +249,18 @@ export default function AdminEntryPage({ params, searchParams }: Props) {
         )}
         {err === 'mail' && (
           <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            Could not send email. Check SMTP env and try again.
+            Could not send email. {ecode ? `(${ecode}) ` : ''}Check SMTP settings and try again.
           </div>
         )}
 
+        {/* Forms */}
         {step === 'secret' ? (
-          <form action={start} className="mt-6 space-y-4">
-            <label className="block text-sm font-medium">
-              Secret key
-              <input
-                name="code"
-                type="password"
-                autoComplete="off"
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Enter admin secret"
-                required
-              />
-            </label>
-            <button
-              type="submit"
-              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-            >
-              Continue
-            </button>
-          </form>
+          <div className="mt-6">
+            <SecretForm action={start} />
+          </div>
         ) : (
-          <div className="mt-6 space-y-4">
-            <form action={verify} className="space-y-4">
-              <label className="block text-sm font-medium">
-                6-digit OTP
-                <input
-                  name="otp"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="one-time-code"
-                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary tracking-[0.3em]"
-                  placeholder="••••••"
-                  required
-                />
-              </label>
-              <button
-                type="submit"
-                className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-              >
-                Verify OTP
-              </button>
-            </form>
-
-            <form action={resend}>
-              <button
-                type="submit"
-                className="w-full rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-              >
-                Resend code
-              </button>
-            </form>
+          <div className="mt-6">
+            <OtpForm action={verify} onResend={resend} />
           </div>
         )}
 
