@@ -132,7 +132,7 @@ export default function OtpForm({
         <div className="absolute inset-0 grid place-items-center rounded-md bg-background/70">
           <div className="flex items-center gap-2 text-sm">
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white">✔</span>
-            Verified! Press Lenter to continue.
+            Verified! Press enter to continue.
           </div>
         </div>
       )}

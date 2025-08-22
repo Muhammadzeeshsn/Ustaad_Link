@@ -1,41 +1,159 @@
 // app/api/auth/[...nextauth]/route.ts
-import NextAuth, { type NextAuthOptions } from 'next-auth'
-import Credentials from 'next-auth/providers/credentials'
-import bcrypt from 'bcryptjs'
-import { prisma } from '@/lib/prisma'
+import NextAuth from "next-auth"
+import CredentialsProvider from "next-auth/providers/credentials"
+import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
+import crypto from "crypto"
+import { sendMail } from "@/lib/mail"
 
-export const authOptions: NextAuthOptions = {
-  session: { strategy: 'jwt' },
+type RoleUpper = "STUDENT" | "TUTOR" | "ADMIN"
+
+function code6() {
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0")
+}
+function sha(s: string) {
+  return crypto.createHash("sha256").update(s).digest("hex")
+}
+const toUpperRole = (r: string | null | undefined): RoleUpper =>
+  (String(r).toUpperCase() as RoleUpper) === "TUTOR" ? "TUTOR" : (String(r).toUpperCase() as RoleUpper) === "ADMIN" ? "ADMIN" : "STUDENT"
+
+const authHandler = NextAuth({
+  pages: {
+    signIn: "/auth",
+  },
+  session: { strategy: "jwt" },
   providers: [
-    Credentials({
-      name: 'Credentials',
+    CredentialsProvider({
+      name: "Credentials",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
+        role: { label: "Role", type: "text" },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
-        const email = credentials.email.trim().toLowerCase()
+      async authorize(creds) {
+        const email = (creds?.email ?? "").toLowerCase().trim()
+        const password = String(creds?.password ?? "")
+        const role = toUpperRole(creds?.role)
 
-        const user = await prisma.user.findUnique({ where: { email } })
+        if (!email || !password) return null
+
+        // Throttle row (composite unique by [email, role])
+        const now = new Date()
+        const throttle = await prisma.loginThrottle.findUnique({
+          where: { email_role: { email, role } } as any,
+        }).catch(() => null)
+
+        // If locked, require a recent USED login OTP (set by /api/auth/otp/verify)
+        if (throttle?.lockedUntil && now < throttle.lockedUntil) {
+          const recent = await prisma.otpChallenge.findFirst({
+            where: {
+              email,
+              reason: "login",
+              used: true,
+              createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+            },
+            orderBy: { createdAt: "desc" },
+          })
+          if (!recent) {
+            // create a login OTP if cooldown allows
+            const last = await prisma.otpChallenge.findFirst({
+              where: { email, reason: "login" },
+              orderBy: { createdAt: "desc" },
+            })
+            const since = last ? (Date.now() - new Date(last.createdAt).getTime()) / 1000 : 999
+            if (since > 45) {
+              const code = code6()
+              await prisma.otpChallenge.create({
+                data: {
+                  email,
+                  reason: "login",
+                  codeHash: sha(code),
+                  expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+                },
+              })
+              await sendMail({
+                to: email,
+                subject: "Login verification code - UstaadLink",
+                text: `Your code is ${code}. It expires in 2 minutes.`,
+                html: `<p>Your code is <b style="font-size:18px">${code}</b>. It expires in <b>2 minutes</b>.</p>`,
+              })
+            }
+            throw new Error("OTP_REQUIRED")
+          }
+        }
+
+        const user = await prisma.user.findFirst({ where: { email, role } as any })
         if (!user) return null
 
-        // ⚠️ change this if your hashed password field is named differently
-        const hashed =
-          (user as any).passwordHash ??
-          (user as any).hashedPassword ??
-          (user as any).password
+        const ok = await bcrypt.compare(password, user.hashedPassword)
+        if (!ok) {
+          // increment count
+          const updated = await prisma.loginThrottle
+            .upsert({
+              where: { email_role: { email, role } } as any,
+              create: { email, role: role as any, count: 1, lastAttemptAt: now },
+              update: { count: { increment: 1 }, lastAttemptAt: now },
+            })
+            .catch(() => null)
 
-        const ok = hashed ? await bcrypt.compare(credentials.password, hashed) : false
-        if (!ok) return null
+          const newCount = (updated?.count ?? 0) + 1
+          if (newCount >= 3) {
+            // lock for 10 minutes
+            await prisma.loginThrottle.update({
+              where: { email_role: { email, role } } as any,
+              data: { lockedUntil: new Date(Date.now() + 10 * 60 * 1000) },
+            }).catch(() => {})
+            // send OTP (respect cooldown)
+            const last = await prisma.otpChallenge.findFirst({
+              where: { email, reason: "login" },
+              orderBy: { createdAt: "desc" },
+            })
+            const since = last ? (Date.now() - new Date(last.createdAt).getTime()) / 1000 : 999
+            if (since > 45) {
+              const code = code6()
+              await prisma.otpChallenge.create({
+                data: {
+                  email,
+                  reason: "login",
+                  codeHash: sha(code),
+                  expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+                },
+              })
+              await sendMail({
+                to: email,
+                subject: "Login verification code - UstaadLink",
+                text: `Your code is ${code}. It expires in 2 minutes.`,
+                html: `<p>Your code is <b style="font-size:18px">${code}</b>. It expires in <b>2 minutes</b>.</p>`,
+              })
+            }
+            throw new Error("OTP_REQUIRED")
+          }
+          return null
+        }
 
-        // Return minimal info; include role so we can persist it
+        // password correct; if locked, still require a used OTP in last 10 min
+        if (throttle?.lockedUntil && now < throttle.lockedUntil) {
+          const recent = await prisma.otpChallenge.findFirst({
+            where: {
+              email,
+              reason: "login",
+              used: true,
+              createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+            },
+            orderBy: { createdAt: "desc" },
+          })
+          if (!recent) throw new Error("OTP_REQUIRED")
+        }
+
+        // success: clear throttle
+        await prisma.loginThrottle.deleteMany({ where: { email, role } as any }).catch(() => {})
+
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
-          role: (user as any).role, // should be 'TUTOR' | 'STUDENT' | 'ADMIN'
-        } as any
+          name: user.name ?? null,
+          role: user.role as RoleUpper,
+        }
       },
     }),
   ],
@@ -43,22 +161,19 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.role = (user as any).role
-        token.name = (user as any).name ?? token.name
-        token.id = (user as any).id ?? token.id
+        token.id = (user as any).id
       }
       return token
     },
     async session({ session, token }) {
-      if (session.user) {
-        ;(session.user as any).role = (token as any).role
-        ;(session.user as any).id = (token as any).id
-        session.user.name = (token as any).name ?? session.user.name
+      if (session?.user) {
+        ;(session.user as any).role = token.role
+        ;(session.user as any).id = token.id
       }
       return session
     },
   },
-  pages: { signIn: '/auth' },
-}
+})
 
-const handler = NextAuth(authOptions)
-export { handler as GET, handler as POST }
+export const GET = authHandler
+export const POST = authHandler

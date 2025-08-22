@@ -264,3 +264,30 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+model OtpChallenge {
+  id        String   @id @default(cuid())
+  email     String
+  reason    String   // 'register' | 'reset' | 'login'
+  codeHash  String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  payload   Json?    // for 'register': { role, name, phone, hashedPassword }
+  createdAt DateTime @default(now())
+  attempts  Int      @default(0)
+
+  @@index([email])
+  @@index([reason])
+}
+
+model LoginThrottle {
+  id            String   @id @default(cuid())
+  email         String
+  role          Role
+  count         Int       @default(0)
+  lastAttemptAt DateTime  @default(now())
+  lockedUntil   DateTime?
+
+  @@unique([email, role])
+  @@index([lockedUntil])
+}
