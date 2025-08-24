@@ -1,12 +1,26 @@
 // app/api/auth/[...nextauth]/route.ts
-import NextAuth from "next-auth"
+import NextAuth, {
+  type NextAuthOptions,
+  type Session,
+  type User as NAUser,
+  type Account,
+  type Profile,
+} from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
+import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/mail"
+import { getServerSession } from "next-auth"
 
 type RoleUpper = "STUDENT" | "TUTOR" | "ADMIN"
+
+const toUpperRole = (r: string | null | undefined): RoleUpper => {
+  const up = String(r || "").toUpperCase()
+  if (up === "TUTOR") return "TUTOR"
+  if (up === "ADMIN") return "ADMIN"
+  return "STUDENT"
+}
 
 function code6() {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0")
@@ -14,13 +28,9 @@ function code6() {
 function sha(s: string) {
   return crypto.createHash("sha256").update(s).digest("hex")
 }
-const toUpperRole = (r: string | null | undefined): RoleUpper =>
-  (String(r).toUpperCase() as RoleUpper) === "TUTOR" ? "TUTOR" : (String(r).toUpperCase() as RoleUpper) === "ADMIN" ? "ADMIN" : "STUDENT"
 
-const authHandler = NextAuth({
-  pages: {
-    signIn: "/auth",
-  },
+export const authOptions: NextAuthOptions = {
+  pages: { signIn: "/auth" },
   session: { strategy: "jwt" },
   providers: [
     CredentialsProvider({
@@ -34,14 +44,14 @@ const authHandler = NextAuth({
         const email = (creds?.email ?? "").toLowerCase().trim()
         const password = String(creds?.password ?? "")
         const role = toUpperRole(creds?.role)
-
         if (!email || !password) return null
 
-        // Throttle row (composite unique by [email, role])
         const now = new Date()
-        const throttle = await prisma.loginThrottle.findUnique({
-          where: { email_role: { email, role } } as any,
-        }).catch(() => null)
+
+        // throttle row (composite unique by [email, role])
+        const throttle = await prisma.loginThrottle
+          .findUnique({ where: { email_role: { email, role } } as any })
+          .catch(() => null)
 
         // If locked, require a recent USED login OTP (set by /api/auth/otp/verify)
         if (throttle?.lockedUntil && now < throttle.lockedUntil) {
@@ -55,7 +65,7 @@ const authHandler = NextAuth({
             orderBy: { createdAt: "desc" },
           })
           if (!recent) {
-            // create a login OTP if cooldown allows
+            // Send OTP if cooldown allows
             const last = await prisma.otpChallenge.findFirst({
               where: { email, reason: "login" },
               orderBy: { createdAt: "desc" },
@@ -87,7 +97,7 @@ const authHandler = NextAuth({
 
         const ok = await bcrypt.compare(password, user.hashedPassword)
         if (!ok) {
-          // increment count
+          // increment attempts
           const updated = await prisma.loginThrottle
             .upsert({
               where: { email_role: { email, role } } as any,
@@ -99,10 +109,13 @@ const authHandler = NextAuth({
           const newCount = (updated?.count ?? 0) + 1
           if (newCount >= 3) {
             // lock for 10 minutes
-            await prisma.loginThrottle.update({
-              where: { email_role: { email, role } } as any,
-              data: { lockedUntil: new Date(Date.now() + 10 * 60 * 1000) },
-            }).catch(() => {})
+            await prisma.loginThrottle
+              .update({
+                where: { email_role: { email, role } } as any,
+                data: { lockedUntil: new Date(Date.now() + 10 * 60 * 1000) },
+              })
+              .catch(() => {})
+
             // send OTP (respect cooldown)
             const last = await prisma.otpChallenge.findFirst({
               where: { email, reason: "login" },
@@ -145,7 +158,7 @@ const authHandler = NextAuth({
           if (!recent) throw new Error("OTP_REQUIRED")
         }
 
-        // success: clear throttle
+        // success: clear throttle record
         await prisma.loginThrottle.deleteMany({ where: { email, role } as any }).catch(() => {})
 
         return {
@@ -153,27 +166,38 @@ const authHandler = NextAuth({
           email: user.email,
           name: user.name ?? null,
           role: user.role as RoleUpper,
-        }
+        } as unknown as NAUser
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt(args: {
+      token: Record<string, unknown>
+      user?: NAUser | null
+      account?: Account | null
+      profile?: Profile | null
+    }) {
+      const { token, user } = args
       if (user) {
-        token.role = (user as any).role
-        token.id = (user as any).id
+        ;(token as any).role = (user as any).role
+        ;(token as any).id = (user as any).id
       }
       return token
     },
-    async session({ session, token }) {
+    async session(args: { session: Session; token: Record<string, unknown> }) {
+      const { session, token } = args
       if (session?.user) {
-        ;(session.user as any).role = token.role
-        ;(session.user as any).id = token.id
+        ;(session.user as any).role = (token as any).role
+        ;(session.user as any).id = (token as any).id
       }
       return session
     },
   },
-})
+}
 
-export const GET = authHandler
-export const POST = authHandler
+// App Router exports (v4 style handler)
+const handler = NextAuth(authOptions)
+export { handler as GET, handler as POST }
+
+// Helper other route files can import:  import { auth } from "@/app/api/auth/[...nextauth]/route"
+export const auth = () => getServerSession(authOptions)

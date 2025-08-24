@@ -1,106 +1,65 @@
-// app/api/auth/otp/start/route.ts
-import { NextResponse } from 'next/server'
-import { prisma } from '@/app/lib/db'
-import { sendMail } from '@/app/lib/mail'
-import crypto from 'crypto'
-import bcrypt from 'bcryptjs'
+import { NextResponse } from "next/server"
+import crypto from "crypto"
+import { prisma } from "@/app/lib/prisma"
+import { sendMail } from "@/app/lib/mail"
 
-const OTP_TTL_MS = 2 * 60 * 1000   // 2 minutes
-const RESEND_COOLDOWN_MS = 45 * 1000
-
-function hash(s: string) {
-  return crypto.createHash('sha256').update(s).digest('hex')
+function code6() {
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0")
+}
+function sha(s: string) {
+  return crypto.createHash("sha256").update(s).digest("hex")
 }
 
-function sixDigit() {
-  // 000000..999999, always 6 chars
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
+// POST /api/auth/otp/start
+// body: { email: string, reason: "login" | "register" | string }
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}))
-    const email = String(body.email || '').trim().toLowerCase()
-    const reason = String(body.reason || '') as 'register' | 'reset' | 'login'
-    const role = String(body.role || '') // 'STUDENT' | 'TUTOR' (optional for reset/login)
-    const payload = body.payload || null // signup payload
+    const { email: rawEmail, reason: rawReason } = await req.json().catch(() => ({}))
+    const email = String(rawEmail || "").trim().toLowerCase()
+    const reason = String(rawReason || "login").trim().toLowerCase()
 
-    if (!email || !reason) {
-      return NextResponse.json({ error: 'bad_request' }, { status: 400 })
+    if (!email) {
+      return NextResponse.json({ error: "Email required" }, { status: 400 })
     }
 
-    // Cooldown: block if there is a not-yet-expired challenge created recently
+    // Cooldown: 45s since last OTP for same email+reason
     const last = await prisma.otpChallenge.findFirst({
-      where: { email, reason, used: false },
-      orderBy: { createdAt: 'desc' },
+      where: { email, reason },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
     })
 
     if (last) {
-      const since = Date.now() - new Date(last.createdAt).getTime()
-      if (since < RESEND_COOLDOWN_MS) {
-        const remain = Math.ceil((RESEND_COOLDOWN_MS - since) / 1000)
-        return NextResponse.json({ error: 'cooldown', remain }, { status: 429 })
+      const since = (Date.now() - new Date(last.createdAt).getTime()) / 1000
+      if (since < 45) {
+        return NextResponse.json({ error: "Please wait before requesting another code." }, { status: 429 })
       }
     }
 
-    // For signup: if user already exists, short-circuit
-    if (reason === 'register') {
-      const exists = await prisma.user.findUnique({ where: { email } })
-      if (exists) {
-        return NextResponse.json({ error: 'exists' }, { status: 409 })
-      }
-    }
-
-    // Generate code & hash
-    const code = sixDigit()
-    const codeHash = hash(code)
-    const expiresAt = new Date(Date.now() + OTP_TTL_MS)
-
-    // Build safe payload for register
-    let safePayload: any = null
-    if (reason === 'register' && payload) {
-      const name = typeof payload.name === 'string' ? payload.name : null
-      const phone = typeof payload.phone === 'string' ? payload.phone : null
-      const r = typeof payload.role === 'string' ? payload.role : role
-      const pw = String(payload.password || '')
-      const hashedPassword = await bcrypt.hash(pw, 10)
-      safePayload = { name, phone, role: r, hashedPassword }
-    }
-
-    const created = await prisma.otpChallenge.create({
+    const code = code6()
+    await prisma.otpChallenge.create({
       data: {
         email,
         reason,
-        codeHash,
-        expiresAt,
-        used: false,
-        payload: safePayload, // null for reset/login
+        codeHash: sha(code),
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes
       },
-      select: { id: true, email: true, reason: true, expiresAt: true },
     })
 
-    // Send the email
-    const html = `
-      <div style="font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;">
-        <h2>UstaadLink Verification</h2>
-        <p>Your verification code is:</p>
-        <p style="font-size:24px; font-weight:700; letter-spacing:4px">${code}</p>
-        <p>This code expires in 2 minutes.</p>
-      </div>
-    `
-    const mailRes = await sendMail({ to: email, subject: 'Your verification code', html })
-    if (!mailRes.ok) {
-      // If email failed, delete the challenge we just created
-      await prisma.otpChallenge.delete({ where: { id: created.id } })
-      return NextResponse.json({ error: 'mail_fail' }, { status: 500 })
+    const ok = await sendMail({
+      to: email,
+      subject: "Your verification code – UstaadLink",
+      text: `Your code is ${code}. It expires in 2 minutes.`,
+      html: `<p>Your code is <b style="font-size:18px">${code}</b>. It expires in <b>2 minutes</b>.</p>`,
+    })
+
+    if (!ok) {
+      return NextResponse.json({ error: "Could not send verification code." }, { status: 500 })
     }
 
-    return NextResponse.json({
-      ok: true,
-      challengeId: created.id,
-      cooldown: Math.ceil(RESEND_COOLDOWN_MS / 1000),
-    })
-  } catch (e) {
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error("[otp/start] error:", err?.message || err)
+    return NextResponse.json({ error: "Server error" }, { status: 500 })
   }
 }

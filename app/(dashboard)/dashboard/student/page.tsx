@@ -1,86 +1,132 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import useSWR from 'swr'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
-import { Plus, BookOpen, Users, ClipboardList, ChevronRight } from 'lucide-react'
-import { useToast } from '@/components/ui/use-toast'
-import { swrFetcher } from '@/lib/swr'
+import { useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import {
+  Plus,
+  BookOpen,
+  Users,
+  ClipboardList,
+  ChevronRight,
+} from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { swrFetcher } from "@/lib/swr";
+import { RequestCard } from "../_components/RequestCard";
 
-type RequestType = 'HIRE_TUTOR' | 'HIRE_QURAN' | 'PROJECT_HELP' | string
+type RequestType = "HIRE_TUTOR" | "HIRE_QURAN" | "PROJECT_HELP" | string;
 type RequestStatus =
-  | 'pending_review'
-  | 'approved'
-  | 'rejected'
-  | 'assigned'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled'
-  | string
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "assigned"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+  | string;
 
-type RequestRow = { id: string; title: string; description: string | null; type: RequestType; status: RequestStatus; createdAt: string }
+type RequestRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  type: RequestType;
+  status: RequestStatus;
+  createdAt: string;
+};
 type StudentProfile = {
-  userId: string
-  name: string
-  email?: string | null
-  phone?: string | null
-  addressLine?: string | null
-  countryCode?: string | null
-  stateCode?: string | null
-  cityName?: string | null
-  cnic?: string | null
-}
+  userId: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  addressLine?: string | null;
+  countryCode?: string | null;
+  stateCode?: string | null;
+  cityName?: string | null;
+  cnic?: string | null;
+};
 
-const formatDate = (iso?: string) => (iso ? new Date(iso).toLocaleDateString() : '')
-const toLabel = (v: string) => v.replace(/[_-]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
+const formatDate = (iso?: string) =>
+  iso ? new Date(iso).toLocaleDateString() : "";
+const toLabel = (v: string) =>
+  v.replace(/[_-]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 function statusBadgeClasses(status: string) {
   switch (status) {
-    case 'pending_review':
-      return 'bg-yellow-100 text-yellow-800'
-    case 'approved':
-      return 'bg-green-100 text-green-800'
-    case 'rejected':
-      return 'bg-red-100 text-red-800'
-    case 'assigned':
-      return 'bg-blue-100 text-blue-800'
-    case 'in_progress':
-      return 'bg-indigo-100 text-indigo-800'
-    case 'completed':
-      return 'bg-purple-100 text-purple-800'
+    case "pending_review":
+      return "bg-yellow-100 text-yellow-800";
+    case "approved":
+      return "bg-green-100 text-green-800";
+    case "rejected":
+      return "bg-red-100 text-red-800";
+    case "assigned":
+      return "bg-blue-100 text-blue-800";
+    case "in_progress":
+      return "bg-indigo-100 text-indigo-800";
+    case "completed":
+      return "bg-purple-100 text-purple-800";
     default:
-      return 'bg-gray-100 text-gray-800'
+      return "bg-gray-100 text-gray-800";
   }
 }
 function computeProfileCompletion(p?: StudentProfile | null) {
-  if (!p) return 0
-  const fields = [p.name, p.email, p.phone, p.addressLine, p.countryCode, p.stateCode, p.cityName, p.cnic]
-  const filled = fields.filter((v) => (v ?? '').toString().trim()).length
-  return Math.max(10, Math.min(100, Math.round((filled / fields.length) * 100)))
+  if (!p) return 0;
+  const fields = [
+    p.name,
+    p.email,
+    p.phone,
+    p.addressLine,
+    p.countryCode,
+    p.stateCode,
+    p.cityName,
+    p.cnic,
+  ];
+  const filled = fields.filter((v) => (v ?? "").toString().trim()).length;
+  return Math.max(
+    10,
+    Math.min(100, Math.round((filled / fields.length) * 100))
+  );
 }
 
 export default function StudentDashboardPage() {
-  const { toast } = useToast()
-  const [tab, setTab] = useState<'requests' | 'assignments' | 'browse'>('requests')
-  const browseRef = useRef<HTMLDivElement | null>(null)
+  const { toast } = useToast();
+  const [tab, setTab] = useState<"requests" | "assignments" | "browse">(
+    "requests"
+  );
+  const browseRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: meRes } = useSWR<{ data: StudentProfile }>('/api/students/me', swrFetcher)
-  const { data: reqRes, error: reqErr, isLoading: loadingReqs } = useSWR<{ data: RequestRow[] }>('/api/requests', swrFetcher)
+  const { data: meRes } = useSWR<{ data: StudentProfile }>(
+    "/api/students/me",
+    swrFetcher
+  );
+  const {
+    data: reqRes,
+    error: reqErr,
+    isLoading: loadingReqs,
+  } = useSWR<{ data: RequestRow[] }>("/api/requests", swrFetcher);
 
-  const profile = meRes?.data ?? null
-  const requests = reqRes?.data ?? []
-  const profilePct = useMemo(() => computeProfileCompletion(profile), [profile])
+  const profile = meRes?.data ?? null;
+  const requests = reqRes?.data ?? [];
+  const profilePct = useMemo(
+    () => computeProfileCompletion(profile),
+    [profile]
+  );
 
   // mobile: when switching to “browse”, scroll to the panel
   useEffect(() => {
-    if (tab === 'browse' && browseRef.current) browseRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [tab])
+    if (tab === "browse" && browseRef.current)
+      browseRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [tab]);
 
-  if (!profile) return <div className="min-h-[60vh] grid place-items-center text-muted-foreground">Loading…</div>
+  if (!profile)
+    return (
+      <div className="min-h-[60vh] grid place-items-center text-muted-foreground">
+        Loading…
+      </div>
+    );
 
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-primary/5 via-background to-background">
@@ -89,21 +135,44 @@ export default function StudentDashboardPage() {
           <Card className="overflow-hidden rounded-2xl border bg-card shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between">
-                Profile <span className="text-sm font-normal text-primary">{profilePct}% Complete</span>
+                Profile{" "}
+                <span className="text-sm font-normal text-primary">
+                  {profilePct}% Complete
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="flex items-center gap-4">
                 <div className="relative h-16 w-16">
                   <svg viewBox="0 0 36 36" className="h-16 w-16 -rotate-90">
-                    <path d="M18 2a16 16 0 1 1 0 32a16 16 0 1 1 0-32" fill="none" stroke="currentColor" className="text-muted" strokeWidth="3" opacity="0.25" />
-                    <path d="M18 2a16 16 0 1 1 0 32a16 16 0 1 1 0-32" fill="none" stroke="currentColor" className="text-primary" strokeWidth="3" strokeDasharray={`${profilePct}, 100`} />
+                    <path
+                      d="M18 2a16 16 0 1 1 0 32a16 16 0 1 1 0-32"
+                      fill="none"
+                      stroke="currentColor"
+                      className="text-muted"
+                      strokeWidth="3"
+                      opacity="0.25"
+                    />
+                    <path
+                      d="M18 2a16 16 0 1 1 0 32a16 16 0 1 1 0-32"
+                      fill="none"
+                      stroke="currentColor"
+                      className="text-primary"
+                      strokeWidth="3"
+                      strokeDasharray={`${profilePct}, 100`}
+                    />
                   </svg>
-                  <div className="absolute inset-0 grid place-items-center text-sm font-semibold">{profilePct}%</div>
+                  <div className="absolute inset-0 grid place-items-center text-sm font-semibold">
+                    {profilePct}%
+                  </div>
                 </div>
                 <div>
-                  <div className="text-sm font-semibold">{profile?.name || 'Student'}</div>
-                  <div className="text-xs text-muted-foreground">Keep details updated for better matches</div>
+                  <div className="text-sm font-semibold">
+                    {profile?.name || "Student"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Keep details updated for better matches
+                  </div>
                 </div>
               </div>
               <div className="mt-4">
@@ -118,16 +187,42 @@ export default function StudentDashboardPage() {
 
           <div className="md:col-span-2">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <ActionCard title="Post Request" desc="Find a tutor quickly" onClick={() => (window.location.href = '/dashboard/student/new-request')} icon={<Plus className="h-7 w-7" />} />
-              <ActionCard title="Track Requests" desc="Monitor progress" onClick={() => setTab('requests')} icon={<ClipboardList className="h-7 w-7" />} />
-              <ActionCard title="Active Tutoring" desc="Your sessions" onClick={() => setTab('assignments')} icon={<BookOpen className="h-7 w-7" />} />
-              <ActionCard title="Browse Tutors" desc="Find experts" onClick={() => setTab('browse')} icon={<Users className="h-7 w-7" />} />
+              <ActionCard
+                title="Post Request"
+                desc="Find a tutor quickly"
+                onClick={() =>
+                  (window.location.href = "/dashboard/student/new-request")
+                }
+                icon={<Plus className="h-7 w-7" />}
+              />
+              <ActionCard
+                title="Track Requests"
+                desc="Monitor progress"
+                onClick={() => setTab("requests")}
+                icon={<ClipboardList className="h-7 w-7" />}
+              />
+              <ActionCard
+                title="Active Tutoring"
+                desc="Your sessions"
+                onClick={() => setTab("assignments")}
+                icon={<BookOpen className="h-7 w-7" />}
+              />
+              <ActionCard
+                title="Browse Tutors"
+                desc="Find experts"
+                onClick={() => setTab("browse")}
+                icon={<Users className="h-7 w-7" />}
+              />
             </div>
           </div>
         </div>
 
         <div className="mt-8" ref={browseRef}>
-          <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="space-y-6">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as typeof tab)}
+            className="space-y-6"
+          >
             <TabsList className="grid w-full grid-cols-3 md:w-auto">
               <TabsTrigger value="requests">My Requests</TabsTrigger>
               <TabsTrigger value="assignments">Active Tutoring</TabsTrigger>
@@ -137,7 +232,11 @@ export default function StudentDashboardPage() {
             <TabsContent value="requests" className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">My Requests</h2>
-                <Button onClick={() => (window.location.href = '/dashboard/student/new-request')}>
+                <Button
+                  onClick={() =>
+                    (window.location.href = "/dashboard/student/new-request")
+                  }
+                >
                   <Plus className="mr-2 h-4 w-4" /> New Request
                 </Button>
               </div>
@@ -145,23 +244,34 @@ export default function StudentDashboardPage() {
               {loadingReqs ? (
                 <SkeletonList />
               ) : reqErr ? (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{(reqErr as any)?.message || 'Failed to load requests.'}</div>
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {(reqErr as any)?.message || "Failed to load requests."}
+                </div>
               ) : requests.length ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   {requests.map((r) => (
-                    <Card key={r.id} className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                    <Card
+                      key={r.id}
+                      className="overflow-hidden rounded-2xl border bg-card shadow-sm"
+                    >
                       <CardHeader>
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-lg">{r.title}</CardTitle>
                           <div className="flex gap-2">
-                            <Badge className={statusBadgeClasses(r.status)}>{toLabel(r.status)}</Badge>
+                            <Badge className={statusBadgeClasses(r.status)}>
+                              {toLabel(r.status)}
+                            </Badge>
                             <Badge variant="outline">{toLabel(r.type)}</Badge>
                           </div>
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <p className="mb-4 text-sm text-muted-foreground">{r.description || '—'}</p>
-                        <div className="text-xs text-muted-foreground">Posted {formatDate(r.createdAt)}</div>
+                        <p className="mb-4 text-sm text-muted-foreground">
+                          {r.description || "—"}
+                        </p>
+                        <div className="text-xs text-muted-foreground">
+                          Posted {formatDate(r.createdAt)}
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
@@ -170,15 +280,34 @@ export default function StudentDashboardPage() {
                 <EmptyStateCard
                   title="No requests yet"
                   description="Create your first request to find tutors"
-                  action={<Button onClick={() => (window.location.href = '/dashboard/student/new-request')}>Create Request</Button>}
+                  action={
+                    <Button
+                      onClick={() =>
+                        (window.location.href =
+                          "/dashboard/student/new-request")
+                      }
+                    >
+                      Create Request
+                    </Button>
+                  }
                 />
               )}
             </TabsContent>
 
             <TabsContent value="assignments" className="space-y-4">
-              <h2 className="text-xl font-semibold">Active Tutoring Sessions</h2>
-              <EmptyStateCard title="No active tutoring sessions" description="Your approved/assigned requests will appear here" />
+              <h2 className="text-xl font-semibold">
+                Active Tutoring Sessions
+              </h2>
+              <EmptyStateCard
+                title="No active tutoring sessions"
+                description="Your approved/assigned requests will appear here"
+              />
             </TabsContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              {requests.map((r) => (
+                <RequestCard key={r.id} r={r} />
+              ))}
+            </div>
 
             <TabsContent value="browse" className="space-y-4">
               <iframe
@@ -188,10 +317,14 @@ export default function StudentDashboardPage() {
               />
               <Separator />
               <div className="text-xs text-muted-foreground">
-                No public matches? Only tutors who allow public listing appear here.{' '}
-                <Link href="/dashboard/student/new-request" className="text-primary underline underline-offset-4">
+                No public matches? Only tutors who allow public listing appear
+                here.{" "}
+                <Link
+                  href="/dashboard/student/new-request"
+                  className="text-primary underline underline-offset-4"
+                >
                   Post a request
-                </Link>{' '}
+                </Link>{" "}
                 and we’ll arrange a tutor for your needs.
               </div>
             </TabsContent>
@@ -199,7 +332,7 @@ export default function StudentDashboardPage() {
         </div>
       </main>
     </div>
-  )
+  );
 }
 
 function ActionCard({
@@ -208,22 +341,35 @@ function ActionCard({
   icon,
   onClick,
 }: {
-  title: string
-  desc: string
-  icon: React.ReactNode
-  onClick: () => void
+  title: string;
+  desc: string;
+  icon: React.ReactNode;
+  onClick: () => void;
 }) {
   return (
-    <Card onClick={onClick} className="cursor-pointer overflow-hidden rounded-2xl border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+    <Card
+      onClick={onClick}
+      className="cursor-pointer overflow-hidden rounded-2xl border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+    >
       <CardContent className="flex flex-col items-center p-4 text-center">
-        <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</div>
+        <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          {icon}
+        </div>
         <div className="text-sm font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{desc}</div>
       </CardContent>
     </Card>
-  )
+  );
 }
-function EmptyStateCard({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+function EmptyStateCard({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
   return (
     <Card className="rounded-2xl border bg-card/50 shadow-sm">
       <CardContent className="flex flex-col items-center py-12 text-center">
@@ -231,17 +377,22 @@ function EmptyStateCard({ title, description, action }: { title: string; descrip
           <BookOpen className="h-6 w-6 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-semibold">{title}</h3>
-        <p className="mb-4 max-w-[48ch] text-sm text-muted-foreground">{description}</p>
+        <p className="mb-4 max-w-[48ch] text-sm text-muted-foreground">
+          {description}
+        </p>
         {action}
       </CardContent>
     </Card>
-  )
+  );
 }
 function SkeletonList() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="animate-pulse overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <div
+          key={i}
+          className="animate-pulse overflow-hidden rounded-2xl border bg-card shadow-sm"
+        >
           <div className="p-6">
             <div className="flex items-center justify-between">
               <div className="h-5 w-32 rounded bg-muted" />
@@ -254,5 +405,5 @@ function SkeletonList() {
         </div>
       ))}
     </div>
-  )
+  );
 }
