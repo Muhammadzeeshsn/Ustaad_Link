@@ -174,46 +174,67 @@ export default function AuthPage() {
   }
 
   // ------ SIGNUP: verify first, create on verify (server handles actual create on verify) ------
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault()
-    resetMessages()
-    setSubmitting(true)
-    try {
-      const normalizedEmail = normalizeEmail(email)
-      const roleUpper = toUpperRole(role)
+ async function handleSignup(e: React.FormEvent) {
+  e.preventDefault()
+  resetMessages()
+  setSubmitting(true)
+  try {
+    const normalizedEmail = normalizeEmail(email)
+    const roleUpper = toUpperRole(role)
 
-      const { status, data } = await startOtp({
+    const res = await fetch('/api/auth/otp/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         email: normalizedEmail,
         reason: 'register',
         role: roleUpper,
         payload: { name, phone, password, role: roleUpper },
-      })
-      if (status === 409) {
-        setInlineError('An account with this email already exists.')
+      }),
+    })
+
+    const data = await res.json().catch(() => ({}))
+
+    if (res.status === 409) {
+      if (data?.error === 'EMAIL_EXISTS') {
+        setInlineError('This email is already registered. Please log in instead.')
         return
       }
-      if (status === 429) {
-        const remain = data?.remain ?? 45
-        setCooldown(remain)
-        setTimerTick(0)
-        setInlineNote(`Please wait ${remain}s before requesting another code.`)
+      if (data?.error === 'PHONE_EXISTS') {
+        const linked = data?.email ? ` (${data.email})` : ''
+        setInlineError(
+          `This phone number is already linked to an account${linked}. Please log in with that email, or use “Forgot password”.`
+        )
         return
       }
-      if (status !== 200) {
-        setInlineError('Could not send verification code.')
-        return
-      }
-      setSignupChallengeId(data.challengeId)
-      setSignupStep('otp')
-      setCooldown(data.cooldown ?? 45)
-      setTimerTick(0)
-      setInlineSuccess('We sent a 6-digit code to your email.')
-    } catch (err: any) {
-      setInlineError(err?.message ?? 'Please try again.')
-    } finally {
-      setSubmitting(false)
+      setInlineError('Account already exists. Please log in.')
+      return
     }
+
+    if (res.status === 429) {
+      const remain = data?.remain ?? 45
+      setCooldown(remain)
+      setTimerTick(0)
+      setInlineNote(`Please wait ${remain}s before requesting another code.`)
+      return
+    }
+
+    if (!res.ok) {
+      setInlineError('Could not send verification code.')
+      return
+    }
+
+    setSignupChallengeId(data.challengeId)
+    setSignupStep('otp')
+    setCooldown(data.cooldown ?? 45)
+    setTimerTick(0)
+    setInlineSuccess('We sent a 6-digit code to your email.')
+  } catch (err: any) {
+    setInlineError(err?.message ?? 'Please try again.')
+  } finally {
+    setSubmitting(false)
   }
+}
 
 // prevent double submits for the same code
 const lastTriedCodeRef = React.useRef<string | null>(null)

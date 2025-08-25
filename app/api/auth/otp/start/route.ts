@@ -4,61 +4,117 @@ import crypto from "crypto"
 import { prisma } from "@/app/lib/prisma"
 import { sendMail } from "@/app/lib/mail"
 
-type Reason = "register" | "login" | "reset"
-
-const TTL_MINUTES = 10
 const COOLDOWN_SECONDS = 45
+const OTP_TTL_MINUTES = 10
 
-const code6 = () => String(crypto.randomInt(0, 1_000_000)).padStart(6, "0")
-const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex")
+type RoleUpper = "STUDENT" | "TUTOR" | "ADMIN"
+const toRole = (x?: string | null): RoleUpper =>
+  (String(x).toUpperCase() as RoleUpper) === "TUTOR"
+    ? "TUTOR"
+    : (String(x).toUpperCase() as RoleUpper) === "ADMIN"
+    ? "ADMIN"
+    : "STUDENT"
+
+function sha(s: string) {
+  return crypto.createHash("sha256").update(s).digest("hex")
+}
+
+function sixDigits() {
+  return String(Math.floor(100000 + Math.random() * 900000))
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
-    const rawEmail = (body?.email ?? "") as string
-    const reason: Reason = (body?.reason as Reason) || "login"
-    const role = (body?.role as "STUDENT" | "TUTOR" | "ADMIN" | undefined) // optional
+    const email = String(body.email || "").trim().toLowerCase()
+    const reason = String(body.reason || "").trim() // "register" | "login" | "reset"
+    const role: RoleUpper = toRole(body.role || body?.payload?.role)
+    const phoneRaw: string | undefined = body?.payload?.phone ? String(body.payload.phone) : undefined
 
-    const email = rawEmail.trim().toLowerCase()
-    if (!email) return NextResponse.json({ error: "EMAIL_REQUIRED" }, { status: 400 })
-
-    // For forgot password, ensure the user exists first (prevents confusing “not found” later)
-    if (reason === "reset" && role) {
-      const exists = await prisma.user.findFirst({ where: { email, role } })
-      if (!exists) return NextResponse.json({ error: "NO_ACCOUNT" }, { status: 404 })
+    if (!email || !reason) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400 })
     }
 
-    // cooldown per (email, reason)
+    // ---------- 1) PRE‑FLIGHT: block if email already exists ----------
+    if (reason === "register") {
+const existingByEmail = await prisma.user.findFirst({ where: { email } })
+if (existingByEmail) {
+  return NextResponse.json({ error: "EMAIL_EXISTS" }, { status: 409 })
+}      if (existingByEmail) {
+        return NextResponse.json({ error: "EMAIL_EXISTS" }, { status: 409 })
+      }
+
+      // ---------- 2) PRE‑FLIGHT: block if phone already linked ----------
+      if (phoneRaw) {
+        // Check both possible profile tables and surface the owner email if found
+        const existingSP = await prisma.studentProfile.findFirst({
+          where: { phone: phoneRaw },
+          include: { user: { select: { email: true } } },
+        }).catch(() => null)
+
+        const existingTP = await prisma.tutorProfile.findFirst({
+          where: { phone: phoneRaw },
+          include: { user: { select: { email: true } } },
+        }).catch(() => null)
+
+        const ownerEmail = existingSP?.user?.email || existingTP?.user?.email || null
+        if (ownerEmail) {
+          return NextResponse.json(
+            { error: "PHONE_EXISTS", email: ownerEmail },
+            { status: 409 }
+          )
+        }
+      }
+    }
+
+    // ---------- 3) COOLDOWN / THROTTLE ----------
+    // Find the most recent challenge for this email+reason and enforce a simple cooldown
     const last = await prisma.otpChallenge.findFirst({
       where: { email, reason },
       orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
     })
-    const since = last ? (Date.now() - new Date(last.createdAt).getTime()) / 1000 : 999
-    if (since < COOLDOWN_SECONDS) {
-      return NextResponse.json({ error: "TOO_SOON", remain: Math.ceil(COOLDOWN_SECONDS - since) }, { status: 429 })
+
+    if (last) {
+      const deltaSec = Math.floor((Date.now() - last.createdAt.getTime()) / 1000)
+      const remain = COOLDOWN_SECONDS - deltaSec
+      if (remain > 0) {
+        return NextResponse.json({ error: "COOLDOWN", remain }, { status: 429 })
+      }
     }
 
-    const code = code6()
+    // ---------- 4) Create a fresh OTP ----------
+    const code = sixDigits()
+    const codeHash = sha(code)
+    const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
+
     const created = await prisma.otpChallenge.create({
-      data: {
-        email,
-        reason,
-        codeHash: sha(code),
-        used: false,
-        expiresAt: new Date(Date.now() + TTL_MINUTES * 60 * 1000),
-      },
+      data: { email, reason, codeHash, expiresAt, used: false },
+      select: { id: true },
     })
 
-    await sendMail({
-      to: email,
-      subject: "Your verification code - UstaadLink",
-      text: `Your code is ${code}. It expires in ${TTL_MINUTES} minutes.`,
-      html: `<p>Your code is <b style="font-size:18px">${code}</b>. It expires in <b>${TTL_MINUTES} minutes</b>.</p>`,
-    })
+    // ---------- 5) Send email ----------
+    const subject =
+      reason === "register"
+        ? "Verify your email — UstaadLink"
+        : reason === "reset"
+        ? "Password reset code — UstaadLink"
+        : "Login verification code — UstaadLink"
 
-    return NextResponse.json({ ok: true, challengeId: created.id, cooldown: COOLDOWN_SECONDS })
+    const html = `
+      <p>Use this code to continue on UstaadLink:</p>
+      <p style="font-size:22px;font-weight:700;letter-spacing:3px">${code}</p>
+      <p>This code expires in ${OTP_TTL_MINUTES} minutes.</p>
+    `
+    await sendMail({ to: email, subject, html }).catch(() => null)
+
+    return NextResponse.json({
+      ok: true,
+      challengeId: created.id,
+      cooldown: COOLDOWN_SECONDS,
+    })
   } catch (e) {
     console.error("[otp/start] error:", e)
-    return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 })
+    return NextResponse.json({ error: "server_error" }, { status: 500 })
   }
 }
