@@ -215,26 +215,44 @@ export default function AuthPage() {
     }
   }
 
-  async function confirmSignupOtp() {
-    if ((signupOtp || '').replace(/\D/g, '').length !== 6 || !signupChallengeId) return
-    setVerifyingSignup(true)
-    resetMessages()
-    try {
-      await verifyOtp({
+// prevent double submits for the same code
+const lastTriedCodeRef = React.useRef<string | null>(null)
+
+async function confirmSignupOtp() {
+  const codeClean = (signupOtp || '').replace(/\D/g, '')
+  if (codeClean.length !== 6 || !signupChallengeId || verifyingSignup) return
+
+  // guard: only try once per code value
+  if (lastTriedCodeRef.current === codeClean) return
+  lastTriedCodeRef.current = codeClean
+
+  setVerifyingSignup(true)
+  resetMessages()
+  try {
+    const res = await fetch('/api/auth/otp/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         email: normalizeEmail(email),
         reason: 'register',
-        code: signupOtp,
+        code: codeClean,
         challengeId: signupChallengeId,
-      })
-      setSignupStep('verified')
-      setInlineSuccess('Email verified! You can log in now.')
-      setTimeout(() => setMode('login'), 800)
-    } catch (e: any) {
-      setInlineError(e?.message || 'Verification failed.')
-    } finally {
-      setVerifyingSignup(false)
-    }
+        payload: { name, phone, password, role: toUpperRole(role) },
+      }),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok || !j?.ok) throw new Error(j?.error || 'Verification failed.')
+
+    setSignupStep('verified')
+    setInlineSuccess('Email verified! You can log in now.')
+    setTimeout(() => setMode('login'), 800)
+  } catch (e: any) {
+    setInlineError(e?.message || 'Verification failed.')
+  } finally {
+    setVerifyingSignup(false)
   }
+}
+
 
   // ------ LOGIN (with precheck that enforces OTP after 3 wrong attempts, on NEXT correct password) ------
   async function precheckLogin(): Promise<'ok' | 'wrong' | 'otp' | 'legacy'> {

@@ -1,37 +1,42 @@
 // app/api/auth/reset/route.ts
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
+import { NextResponse } from "next/server"
+import bcrypt from "bcryptjs"
+import { prisma } from "@/app/lib/prisma"
 
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
-    const email = (body?.email ?? '').toString().trim().toLowerCase()
-    const newPassword = (body?.newPassword ?? '').toString()
-    const challengeId = (body?.challengeId ?? '').toString()
+    const email = String(body?.email || "").trim().toLowerCase()
+    const newPassword = String(body?.newPassword || "")
+    const challengeId = String(body?.challengeId || "")
 
     if (!email || !newPassword || !challengeId) {
-      return NextResponse.json({ error: 'bad_request' }, { status: 400 })
+      return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 })
     }
     if (newPassword.length < 6) {
-      return NextResponse.json({ error: 'weak_password' }, { status: 400 })
+      return NextResponse.json({ error: "WEAK_PASSWORD" }, { status: 400 })
     }
 
-    // OTP must have been used (verified) and be for reset
-    const ch = await prisma.otpChallenge.findUnique({ where: { id: challengeId } })
-    if (!ch || ch.email.toLowerCase() !== email || ch.reason !== 'reset' || ch.used !== true) {
-      return NextResponse.json({ error: 'no_verify' }, { status: 400 })
-    }
+    // The UI calls /api/auth/otp/verify before this, so we require that OTP to be marked used.
+    const otp = await prisma.otpChallenge.findFirst({
+      where: { id: challengeId, email, reason: "reset", used: true, expiresAt: { gt: new Date(Date.now() - 10 * 60 * 1000) } },
+    })
+    if (!otp) return NextResponse.json({ error: "OTP_NOT_VERIFIED" }, { status: 400 })
 
-    const user = await prisma.user.findUnique({ where: { email } })
-    if (!user) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-
+    // Update password for both roles if you want, or require role. Here we try both STUDENT and TUTOR.
     const hashed = await bcrypt.hash(newPassword, 10)
-    await prisma.user.update({ where: { id: user.id }, data: { hashedPassword: hashed } })
-    await prisma.otpChallenge.delete({ where: { id: ch.id } })
+
+    const updated =
+      (await prisma.user.updateMany({
+        where: { email },
+        data: { hashedPassword: hashed },
+      })) || { count: 0 }
+
+    if (!updated.count) return NextResponse.json({ error: "ACCOUNT_NOT_FOUND" }, { status: 404 })
 
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+  } catch (e) {
+    console.error("[auth/reset] error:", e)
+    return NextResponse.json({ error: "SERVER_ERROR" }, { status: 500 })
   }
 }

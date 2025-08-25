@@ -1,4 +1,5 @@
 // prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,9 +9,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//
-// ================= Enums =================
-//
+//////////////////////
+// ENUMS
+//////////////////////
 
 enum Role {
   STUDENT
@@ -19,8 +20,8 @@ enum Role {
 }
 
 enum UserStatus {
-  PENDING
   ACTIVE
+  PENDING
   SUSPENDED
 }
 
@@ -30,36 +31,30 @@ enum Gender {
   OTHER
 }
 
-enum EducationLevel {
-  PRIMARY
-  MIDDLE
-  MATRIC_SECONDARY
-  INTERMEDIATE
-  UNDERGRADUATE
-  GRADUATE
-  POSTGRADUATE
-  OTHER
-}
-
 enum RequestStatus {
   DRAFT
   OPEN
   APPROVED
+  PENDING_REVIEW
+  ASSIGNED
   IN_PROGRESS
   COMPLETED
-  REJECTED
   CANCELLED
 }
 
 enum RequestType {
-  HIRE_TUTOR
-  HIRE_QURAN
+  SCHOOL
+  COLLEGE
+  UNIVERSITY
+  QURAN
+  PROJECT_HELP
+  OTHER
 }
 
 enum Mode {
   ONLINE
-  OFFLINE
   HYBRID
+  ONSITE
 }
 
 enum ApplicationStatus {
@@ -74,237 +69,189 @@ enum AssignmentStatus {
   PENDING_TUTOR_ACCEPT
   ACCEPTED
   REJECTED
+  COMPLETED
 }
 
-//
-// ================= Core Models =================
-//
+//////////////////////
+// MODELS
+//////////////////////
 
 model User {
-  id             String     @id @default(cuid())
-  name           String?
-  email          String     @unique
+  id             String    @id @default(cuid())
+  email          String    @unique
   hashedPassword String
-  role           Role       @default(STUDENT)
+  role           Role
   status         UserStatus @default(PENDING)
+
+  name           String?
   image          String?
   emailVerified  DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
 
-  // relations
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
   studentProfile   StudentProfile?
   tutorProfile     TutorProfile?
-  requests         Request[]                @relation("RequestCreatedBy")
-  applications     Application[]            @relation("UserApplications")
-  assignments      Assignment[]             @relation("UserAssignments")
+  requests         Request[]        @relation("StudentRequests")
+  applications     Application[]    @relation("UserApplications")
+  assignments      Assignment[]     @relation("UserAssignments")
   notifications    Notification[]
   emailTokens      EmailToken[]
-  emailVerifTokens EmailVerificationToken[]
+  emailVerifications EmailVerificationToken[]
+  otpChallenges    OtpChallenge[]
+  throttles        LoginThrottle[]
 }
 
-//
-// Detailed student profile used on student dashboard
-//
 model StudentProfile {
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
 
-  name           String?
-  phone          String?
-  phoneAlt       String?
-  educationLevel EducationLevel?
-  gender         Gender?
-  institute      String?
-  addressLine    String?
-  location       String?
-  countryCode    String?
-  stateCode      String?
-  cityName       String?
-  zip            String?
-  cnicPassport   String?
-  notes          String?
-  image          String?
+  name          String?
+  phone         String?
+  phoneAlt      String?
+  educationLevel String?
+  gender        Gender?
+  institute     String?
+  addressLine   String?
+  location      String?
+  countryCode   String?
+  stateCode     String?
+  cityName      String?
+  zip           String?
+  cnicPassport  String?
+  notes         String?
+  image         String?
+  dob           DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
-//
-// Minimal tutor profile (extend as needed)
-//
 model TutorProfile {
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
 
-  bio      String?
-  subjects String? // comma-separated or JSON if you prefer
-  rating   Float?
+  bio         String?
+  subjects    String?
+  experience  Int?
+  hourlyRate  Int?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
-//
-// Student request (kept compatible with your routes)
-//
 model Request {
-  id          String @id @default(cuid())
-  createdById String
-  createdBy   User   @relation("RequestCreatedBy", fields: [createdById], references: [id])
+  id              String        @id @default(cuid())
+  studentId       String
+  student         User          @relation("StudentRequests", fields: [studentId], references: [id])
 
-  type   RequestType
-  status RequestStatus @default(OPEN)
+  title           String?
+  description     String?
+  type            RequestType
+  status          RequestStatus @default(OPEN)
 
-  // address/contact for the specific request
-  contactName    String?
-  contactPhone   String?
-  reqCountryCode String?
-  reqStateCode   String?
-  reqCityName    String?
-  reqAddressLine String?
-  reqZip         String?
+  mode            Mode?
+  budgetMin       Int?
+  budgetMax       Int?
+  currency        String?
 
-  // scheduling/basic preferences (optional; keep if you need)
-  mode Mode?
+  contactName     String?
+  contactPhone    String?
+  contactEmail    String?
 
-  // relations
-  applications Application[]
-  assignments  Assignment[]
+  reqAddressLine  String?
+  reqCountryCode  String?
+  reqStateCode    String?
+  reqCityName     String?
+  reqZip          String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  preferredTimeStart String?
+  preferredTimeEnd   String?
+  preferredLanguage  String?
 
-  @@index([status, type])
-  @@index([createdById, status])
+  subjects        String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  applications    Application[]
+  assignments     Assignment[]
 }
 
 model Application {
-  id        String @id @default(cuid())
-  requestId String
-  tutorId   String
-
-  request Request @relation(fields: [requestId], references: [id])
-  tutor   User    @relation("UserApplications", fields: [tutorId], references: [id])
-
-  coverNote   String?
-  proposedFee Int?
-  schedule    String?
+  id          String            @id @default(cuid())
+  requestId   String
+  tutorId     String
   status      ApplicationStatus @default(SUBMITTED)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  coverNote   String?           // <-- REQUIRED by your route
+  proposedFee Int?
+  schedule    String?
 
-  @@index([requestId])
-  @@index([tutorId])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  request     Request           @relation(fields: [requestId], references: [id])
+  tutor       User              @relation("UserApplications", fields: [tutorId], references: [id])
 }
 
 model Assignment {
-  id        String @id @default(cuid())
-  requestId String
-  tutorId   String
+  id         String           @id @default(cuid())
+  requestId  String
+  tutorId    String
+  status     AssignmentStatus @default(PENDING_TUTOR_ACCEPT)
 
-  request Request @relation(fields: [requestId], references: [id])
-  tutor   User    @relation("UserAssignments", fields: [tutorId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  status AssignmentStatus @default(PENDING_TUTOR_ACCEPT)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([requestId])
-  @@index([tutorId])
+  request    Request  @relation(fields: [requestId], references: [id])
+  tutor      User     @relation("UserAssignments", fields: [tutorId], references: [id])
 }
 
-//
-// Optional: public courses (safe to keep)
-//
-model Course {
-  id        String   @id @default(cuid())
-  title     String
-  slug      String   @unique
-  summary   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-//
-// Email verification tokens (dedicated)
-//
 model EmailVerificationToken {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   tokenHash String   @unique
-  expiresAt DateTime
   createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([expiresAt])
 }
 
-//
-// Generic email tokens (e.g., password reset, magic links)
-//
 model EmailToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  tokenHash  String   @unique
+  type       String
+  createdAt  DateTime @default(now())
+}
+
+model OtpChallenge {
+  id         String   @id @default(cuid())
+  email      String
+  reason     String
+  codeHash   String
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model LoginThrottle {
+  id            String   @id @default(cuid())
+  email         String
+  role          Role
+  count         Int      @default(0)
+  lastAttemptAt DateTime
+  lockedUntil   DateTime?
+}
+
+model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  purpose   String // "verify" | "reset" | "login" etc.
-  tokenHash String   @unique
-  expiresAt DateTime
-  consumed  Boolean  @default(false)
+  title     String
+  body      String?
+  read      Boolean  @default(false)
   createdAt DateTime @default(now())
-
-  @@index([userId, purpose])
-  @@index([expiresAt, consumed])
-}
-
-//
-// Login throttle row per (email, role)
-//
-model LoginThrottle {
-  id            String    @id @default(cuid())
-  email         String
-  role          Role
-  count         Int       @default(0)
-  lastAttemptAt DateTime?
-  lockedUntil   DateTime?
-
-  @@unique([email, role])
-  @@index([lockedUntil])
-}
-
-//
-// OTP challenges (NO 'attempts' / NO 'payload')
-// Used by /api/auth/otp/start and /verify
-//
-model OtpChallenge {
-  id        String   @id @default(cuid())
-  email     String
-  reason    String // "login" | "register"
-  codeHash  String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  @@index([email, reason, createdAt])
-  @@index([email, reason, used, expiresAt])
-}
-
-//
-// Notifications
-//
-model Notification {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  title String
-  body  String?
-  read  Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([userId, read, createdAt])
 }

@@ -1,38 +1,44 @@
 // app/api/applications/route.ts
 import { cookies } from "next/headers"
 import { verifySession } from "@/app/lib/jwt"
-import { prisma, $Enums } from "@/app/lib/prisma"
+import { prisma } from "@/app/lib/prisma"
 import { z } from "zod"
 
 const Create = z.object({
   requestId: z.string(),
-  coverNote: z.string().optional(),
-  proposedFee: z.number().int().optional(),
-  schedule: z.string().optional(),
+  // Any extra keys from the client are ignored on purpose.
 })
+
+const OPEN_STATUSES = new Set([
+  "OPEN",
+  "APPROVED",
+  "PENDING_REVIEW",
+] as const)
 
 export async function POST(req: Request) {
   const c = cookies().get("ul_session")?.value
   if (!c) return Response.json({ error: "Unauthorized" }, { status: 401 })
-  const s = await verifySession(c)
-  if (s.role !== "tutor") return Response.json({ error: "Unauthorized" }, { status: 401 })
 
-  const data = Create.parse(await req.json())
+  const s = await verifySession(c)
+  if (s.role !== "tutor") {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const body = await req.json()
+  const data = Create.parse(body)
 
   const rq = await prisma.request.findUnique({ where: { id: data.requestId } })
-  if (!rq || rq.status !== $Enums.RequestStatus.APPROVED) {
+  if (!rq || !OPEN_STATUSES.has(rq.status as any)) {
     return Response.json({ error: "Request not open for applications" }, { status: 400 })
   }
 
-  // ---- Type-escape ONLY for fields your generated client doesn't see yet ----
+  // Only pass fields that certainly exist in your Prisma model.
   const created = await prisma.application.create({
     data: {
       requestId: data.requestId,
       tutorId: s.uid,
-      proposedFee: data.proposedFee,
-      schedule: data.schedule,
-      ...(data.coverNote ? { coverNote: data.coverNote } : {}), // ok at runtime
-    } as any, // <— temp escape until client matches schema
+      // intentionally NOT sending proposedFee / coverNote / schedule
+    },
   })
 
   return Response.json({ data: created })
@@ -41,6 +47,7 @@ export async function POST(req: Request) {
 export async function GET() {
   const c = cookies().get("ul_session")?.value
   if (!c) return Response.json({ error: "Unauthorized" }, { status: 401 })
+
   const s = await verifySession(c)
 
   if (s.role === "tutor") {
