@@ -1,16 +1,18 @@
-import * as React from "react";
-import { Outlet } from "react-router-dom";
+// components/layout/DashboardLayout.tsx
+import * as React from "react"
 
-/**
- * Dashboard shell WITHOUT the public Navbar/Footer.
- * Keep this minimal; each dashboard page can render its own header.
- */
-export default function DashboardLayout() {
+// Dashboard shell WITHOUT the public Navbar/Footer.
+// Keep this minimal; each dashboard page can render its own header.
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <main className="flex-1">
-        <Outlet />
-      </main>
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6">
+        {children}
+      </div>
     </div>
-  );
+  )
 }

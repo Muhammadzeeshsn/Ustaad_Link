@@ -1,30 +1,17 @@
 // app/(dashboard)/dashboard/layout.tsx
-import type { Metadata } from 'next'
-import '../../globals.css'          // ✅ important: two levels up
-import Providers from '../../providers'
-import { Toaster } from '@/components/ui/toaster'
-import Topbar from './_components/Topbar'
+import type { ReactNode } from "react"
+import Topbar from "./_components/Topbar"
 
-export const metadata: Metadata = {
-  title: 'Dashboard • UstaadLink',
-}
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className="bg-background">
-        <Providers>
-          {/* No public Navbar/Footer here */}
-          <Topbar />
-          <main className="min-h-[80vh]">{children}</main>
-          <footer className="border-t bg-muted/30">
-            <div className="container py-4 text-center text-xs text-muted-foreground">
-              © {new Date().getFullYear()} UstaadLink · <a href="/about" className="underline">About</a> · <a href="/contact" className="underline">Contact</a> · <a href="/blog" className="underline">Blog</a>
-            </div>
-          </footer>
-          <Toaster />
-        </Providers>
-      </body>
-    </html>
+    <div className="min-h-screen bg-background text-foreground">
+      <Topbar />
+      <main className="container mx-auto px-4 py-6">{children}</main>
+      <footer className="mt-12 border-t bg-muted/20">
+        <div className="container mx-auto px-4 py-6 text-sm text-muted-foreground">
+          © {new Date().getFullYear()} UstaadLink — Dashboard
+        </div>
+      </footer>
+    </div>
   )
 }

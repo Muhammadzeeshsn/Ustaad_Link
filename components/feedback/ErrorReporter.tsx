@@ -2,36 +2,58 @@
 "use client"
 
 import { useState } from "react"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
+import { BrandButton } from "@/components/brand/BrandButton"
 
-export default function ErrorReporter({ defaultMessage = "", path = "" }: { defaultMessage?: string; path?: string }) {
-  const [note, setNote] = useState("")
+type Props = {
+  defaultMessage?: string
+  path?: string
+  onSent?: () => void
+}
+
+export default function ErrorReporter({ defaultMessage = "", path, onSent }: Props) {
+  const [text, setText] = useState(defaultMessage)
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const page = path || (typeof window !== "undefined" ? window.location.pathname : "")
 
   async function submit() {
+    if (!text.trim() || sending) return
+    setSending(true)
     try {
-      await fetch("/api/report-error", {
+      const res = await fetch("/api/report-error", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: defaultMessage,
-          path,
-          meta: { userNote: note || null, userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "" },
+          message: text.trim(),
+          page,
         }),
       })
-      alert("Thanks! Your report has been sent to admin.")
-    } catch {
-      alert("Failed to send report.")
+      if (!res.ok) throw new Error("send_failed")
+      setSent(true)
+      onSent?.()
+    } finally {
+      setSending(false)
     }
   }
 
+  if (sent) {
+    return <div className="text-sm text-emerald-600">Thanks — your report was sent to the admin.</div>
+  }
+
   return (
-    <div className="grid gap-2 py-2">
-      <Label htmlFor="report-note">Add details (optional)</Label>
-      <Textarea id="report-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What were you doing when it happened?" />
-      <div className="mt-1 flex justify-end">
-        <Button onClick={submit}>Report to Admin</Button>
+    <div className="mt-3 space-y-2">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        className="w-full rounded-md border p-2 text-sm"
+        placeholder="Describe what you were doing when this happened…"
+      />
+      <div className="flex gap-2">
+        <BrandButton type="button" onClick={submit} disabled={sending || !text.trim()}>
+          {sending ? "Sending…" : "Send to Admin"}
+        </BrandButton>
+        <div className="text-xs text-slate-500">We’ll include page, your user ID (if logged in), and IP automatically.</div>
       </div>
     </div>
   )
