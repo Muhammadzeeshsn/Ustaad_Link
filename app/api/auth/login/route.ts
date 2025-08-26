@@ -1,82 +1,85 @@
 // app/api/auth/login/route.ts
-import { NextResponse } from "next/server"
-import { prisma } from "@/app/lib/prisma"
-import bcrypt from "bcryptjs"
-import { cookies } from "next/headers"
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+import { Role } from "@prisma/client";
 
-const OTP_COOKIE = "login_otp_ok"
+type Body = {
+  email: string;
+  password: string;
+  role: Role; // "STUDENT" | "TUTOR" | "ADMIN"
+};
 
-function readGrant() {
-  const c = cookies().get(OTP_COOKIE)?.value
-  if (!c) return null
-  try { return JSON.parse(Buffer.from(c, "base64url").toString("utf8")) as { email: string; role: string; exp: number } }
-  catch { return null }
-}
+async function touchThrottle(email: string, role: Role, failedAttempt: boolean) {
+  const now = new Date();
 
-function writeGrant(email: string, role: string, ttlSec: number) {
-  const payload = { email, role, exp: Date.now() + ttlSec * 1000 }
-  cookies().set(OTP_COOKIE, Buffer.from(JSON.stringify(payload)).toString("base64url"), {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: ttlSec,
-  })
-}
+  // No composite-unique used here; we look up by (email, role)
+  const existing = await prisma.loginThrottle.findFirst({
+    where: { email, role },
+    select: { id: true },
+  });
 
-function clearGrant() {
-  cookies().set(OTP_COOKIE, "", { path: "/", maxAge: 0 })
+  if (!existing) {
+    await prisma.loginThrottle.create({
+      data: {
+        email,
+        role,
+        count: failedAttempt ? 1 : 0,
+        lastAttemptAt: now,
+        // lockedUntil: null,
+      },
+    });
+    return;
+  }
+
+  await prisma.loginThrottle.update({
+    where: { id: existing.id },
+    data: failedAttempt
+      ? {
+          count: { increment: 1 },
+          lastAttemptAt: now,
+        }
+      : {
+          lastAttemptAt: now,
+        },
+  });
 }
 
 export async function POST(req: Request) {
-  const { email, password, role } = await req.json().catch(() => ({}))
-  const emailN = String(email || "").toLowerCase().trim()
-  const roleU = String(role || "").toUpperCase()
+  try {
+    const { email, password, role } = (await req.json()) as Body;
 
-  if (!emailN || !password || !roleU) {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 })
+    if (!email || !password || !role) {
+      return NextResponse.json(
+        { error: "email, password and role are required" },
+        { status: 400 }
+      );
+    }
+
+    // Find the user by (email, role)
+    const user = await prisma.user.findFirst({
+      where: { email, role },
+      select: { id: true, email: true, hashedPassword: true, role: true, status: true },
+    });
+
+    if (!user || !user.hashedPassword) {
+      await touchThrottle(email, role, true);
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const ok = await bcrypt.compare(password, user.hashedPassword);
+    if (!ok) {
+      await touchThrottle(email, role, true);
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    // Successful attempt — still update lastAttemptAt (don’t increment count)
+    await touchThrottle(email, role, false);
+
+    // If you want to set a session/cookie, that’s handled by NextAuth in your [...nextauth] route.
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (err) {
+    console.error("POST /api/auth/login error:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
-
-  // ensure throttle row exists
-  let throttle = await prisma.loginThrottle.findFirst({ where: { email: emailN, role: roleU as any } })
-  if (!throttle) {
-    throttle = await prisma.loginThrottle.create({ data: { email: emailN, role: roleU as any } })
-  }
-
-  const user = await prisma.user.findFirst({ where: { email: emailN, role: roleU as any } })
-  const okPassword = !!user && (await bcrypt.compare(password, user.hashedPassword).catch(() => false))
-
-  // Wrong password flow: increment & respond
-  if (!okPassword) {
-    const updated = await prisma.loginThrottle.update({
-      where: { id: throttle.id },
-      data: { count: { increment: 1 }, lastAttemptAt: new Date() },
-    })
-    const remaining = Math.max(0, 3 - updated.count)
-    // Tell client how many tries left; only *suggest* OTP after 3 fails (BUT do not require until a correct password comes next)
-    return NextResponse.json({
-      ok: false,
-      wrong: true,
-      remaining,
-      otpGateActive: updated.count >= 3,
-    })
-  }
-
-  // Correct password: if 3+ wrongs previously, require OTP unless a valid OTP grant exists
-  const grant = readGrant()
-  const gateActive = throttle.count >= 3
-  const grantValid =
-    !!grant &&
-    grant.email === emailN &&
-    grant.role === roleU &&
-    Date.now() < Number(grant.exp)
-
-  if (gateActive && !grantValid) {
-    // Ask UI to show OTP-for-login. Do NOT sign in yet.
-    return NextResponse.json({ ok: false, otp_required: true })
-  }
-
-  // Login allowed: reset throttle, clear grant, let UI proceed to signIn('credentials')
-  await prisma.loginThrottle.update({ where: { id: throttle.id }, data: { count: 0, lockedUntil: null } })
-  clearGrant()
-  return NextResponse.json({ ok: true })
 }

@@ -32,23 +32,17 @@ enum Gender {
 }
 
 enum RequestStatus {
-  DRAFT
-  OPEN
-  APPROVED
   PENDING_REVIEW
+  APPROVED
   ASSIGNED
-  IN_PROGRESS
   COMPLETED
   CANCELLED
 }
 
 enum RequestType {
-  SCHOOL
-  COLLEGE
-  UNIVERSITY
-  QURAN
+  HIRE_TUTOR
+  HIRE_QURAN
   PROJECT_HELP
-  OTHER
 }
 
 enum Mode {
@@ -58,8 +52,8 @@ enum Mode {
 }
 
 enum ApplicationStatus {
-  SUBMITTED
-  SHORTLISTED
+  PENDING_REVIEW
+  REJECTED
   FORWARDED_TO_STUDENT
   ACCEPTED_BY_STUDENT
   DECLINED_BY_STUDENT
@@ -77,136 +71,135 @@ enum AssignmentStatus {
 //////////////////////
 
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
+  id             String     @id @default(cuid())
+  email          String     @unique
   hashedPassword String
   role           Role
   status         UserStatus @default(PENDING)
 
-  name           String?
-  image          String?
-  emailVerified  DateTime?
+  name          String?
+  image         String?
+  emailVerified DateTime?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  studentProfile   StudentProfile?
-  tutorProfile     TutorProfile?
-  requests         Request[]        @relation("StudentRequests")
-  applications     Application[]    @relation("UserApplications")
-  assignments      Assignment[]     @relation("UserAssignments")
-  notifications    Notification[]
-  emailTokens      EmailToken[]
+  studentProfile     StudentProfile?
+  tutorProfile       TutorProfile?
+  requests           Request[]                @relation("StudentRequests")
+  applications       Application[]            @relation("UserApplications")
+  assignments        Assignment[]             @relation("UserAssignments")
+  notifications      Notification[]
+  emailTokens        EmailToken[]
   emailVerifications EmailVerificationToken[]
-  otpChallenges    OtpChallenge[]
-  throttles        LoginThrottle[]
+  otpChallenges      OtpChallenge[]
+  throttles          LoginThrottle[]
 }
 
 model StudentProfile {
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id])
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
 
-  name          String?
-  phone         String?
-  phoneAlt      String?
+  name           String?
+  phone          String?
+  phoneAlt       String?
   educationLevel String?
-  gender        Gender?
-  institute     String?
-  addressLine   String?
-  location      String?
-  countryCode   String?
-  stateCode     String?
-  cityName      String?
-  zip           String?
-  cnicPassport  String?
-  notes         String?
-  image         String?
-  dob           DateTime?
+  gender         Gender?
+  institute      String?
+  addressLine    String?
+  countryCode    String?
+  stateCode      String?
+  cityName       String?
+  zip            String?
+  cnicPassport   String?
+  notes          String?
+  image          String?
+  dob            DateTime?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TutorProfile {
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
 
-  bio         String?
-  subjects    String?
-  experience  Int?
-  hourlyRate  Int?
+  bio        String?
+  subjects   String?
+  experience Int?
+  hourlyRate Int?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Request {
-  id              String        @id @default(cuid())
-  studentId       String
-  student         User          @relation("StudentRequests", fields: [studentId], references: [id])
+  id        String @id @default(cuid())
+  studentId String
+  student   User   @relation("StudentRequests", fields: [studentId], references: [id])
 
-  title           String?
-  description     String?
-  type            RequestType
-  status          RequestStatus @default(OPEN)
+  title       String?
+  description String?
+  type        RequestType
+  status      RequestStatus @default(PENDING_REVIEW) // <-- fix here
 
-  mode            Mode?
-  budgetMin       Int?
-  budgetMax       Int?
-  currency        String?
+  mode      Mode?
+  budgetMin Int?
+  budgetMax Int?
+  currency  String?
 
-  contactName     String?
-  contactPhone    String?
-  contactEmail    String?
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
 
-  reqAddressLine  String?
-  reqCountryCode  String?
-  reqStateCode    String?
-  reqCityName     String?
-  reqZip          String?
+  reqAddressLine String?
+  reqCountryCode String?
+  reqStateCode   String?
+  reqCityName    String?
+  reqZip         String?
 
   preferredTimeStart String?
   preferredTimeEnd   String?
   preferredLanguage  String?
 
-  subjects        String?
+  subjects String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  applications    Application[]
-  assignments     Assignment[]
+  applications Application[]
+  assignments  Assignment[]
 }
 
 model Application {
-  id          String            @id @default(cuid())
-  requestId   String
-  tutorId     String
-  status      ApplicationStatus @default(SUBMITTED)
+  id        String            @id @default(cuid())
+  requestId String
+  tutorId   String
+  status    ApplicationStatus @default(PENDING_REVIEW)
 
-  coverNote   String?           // <-- REQUIRED by your route
+  coverNote   String?
   proposedFee Int?
   schedule    String?
 
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  request     Request           @relation(fields: [requestId], references: [id])
-  tutor       User              @relation("UserApplications", fields: [tutorId], references: [id])
+  request Request @relation(fields: [requestId], references: [id])
+  tutor   User    @relation("UserApplications", fields: [tutorId], references: [id])
 }
 
 model Assignment {
-  id         String           @id @default(cuid())
-  requestId  String
-  tutorId    String
-  status     AssignmentStatus @default(PENDING_TUTOR_ACCEPT)
+  id        String           @id @default(cuid())
+  requestId String
+  tutorId   String
+  status    AssignmentStatus @default(PENDING_TUTOR_ACCEPT)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  request    Request  @relation(fields: [requestId], references: [id])
-  tutor      User     @relation("UserAssignments", fields: [tutorId], references: [id])
+  request Request @relation(fields: [requestId], references: [id])
+  tutor   User    @relation("UserAssignments", fields: [tutorId], references: [id])
 }
 
 model EmailVerificationToken {
@@ -218,32 +211,40 @@ model EmailVerificationToken {
 }
 
 model EmailToken {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  tokenHash  String   @unique
-  type       String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tokenHash String   @unique
+  type      String
+  createdAt DateTime @default(now())
 }
 
 model OtpChallenge {
-  id         String   @id @default(cuid())
-  email      String
-  reason     String
-  codeHash   String
-  expiresAt  DateTime
-  used       Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  email     String
+  reason    String
+  codeHash  String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 }
 
 model LoginThrottle {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   email         String
   role          Role
-  count         Int      @default(0)
+  count         Int       @default(0)
   lastAttemptAt DateTime
   lockedUntil   DateTime?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@unique([email, role], name: "email_role") // <-- ADDED (composite unique)
 }
 
 model Notification {
