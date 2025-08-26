@@ -11,18 +11,26 @@ import { useToast } from '@/hooks/use-toast'
 import { BookOpen, PenLine, GraduationCap } from 'lucide-react'
 import { fadeUp as fade } from '@/lib/motion'
 
-/* ── Types ───────────────────────────────────────────────
-   Align categories with your Prisma enums / API contract. */
 export type RequestCategory = 'HIRE_TUTOR' | 'HIRE_QURAN' | 'PROJECT_HELP'
-
 type Mode = 'online' | 'onsite' | 'hybrid'
 
 type CommonFields = {
   title: string
-  details: string
+  description: string
   budgetMin?: number | null
   budgetMax?: number | null
+  currency?: string | null
   mode?: Mode
+  // contact + address
+  contactName?: string | null
+  contactPhone?: string | null
+  contactEmail?: string | null
+  reqAddressLine?: string | null
+  reqCountryCode?: string | null
+  reqStateCode?: string | null
+  reqCityName?: string | null
+  reqZip?: string | null
+  preferredLanguage?: string | null
 }
 
 type TutorFields = CommonFields & {
@@ -30,7 +38,7 @@ type TutorFields = CommonFields & {
   level?: string
   schedule?: string
   startDate?: string
-  cityPref?: string | null
+  cityPref?: string | null // legacy; not sent anymore
 }
 
 type AssignmentFields = CommonFields & {
@@ -46,65 +54,105 @@ type FormState =
 export interface NewRequestDialogProps {
   open: boolean
   onOpenChange: (v: boolean) => void
-  /** Optional; your API can also resolve user from cookies/JWT */
   userId?: string
 }
-
-/* ── Component ────────────────────────────────────────── */
 
 export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialogProps) {
   const { toast } = useToast()
 
   const [step, setStep] = React.useState<'pick' | 'form' | 'review'>('pick')
   const [category, setCategory] = React.useState<RequestCategory | null>(null)
+  const [useProfile, setUseProfile] = React.useState(false)
+  const [loadingProfile, setLoadingProfile] = React.useState(false)
 
   const [tutorData, setTutorData] = React.useState<TutorFields>({
     title: '',
-    details: '',
+    description: '',
     subject: '',
     level: '',
     schedule: '',
     startDate: '',
     budgetMin: undefined,
     budgetMax: undefined,
+    currency: undefined,
     mode: 'online',
     cityPref: '',
+    contactName: '',
+    contactPhone: '',
+    contactEmail: '',
+    reqAddressLine: '',
+    reqCountryCode: '',
+    reqStateCode: '',
+    reqCityName: '',
+    reqZip: '',
+    preferredLanguage: '',
   })
 
   const [assignmentData, setAssignmentData] = React.useState<AssignmentFields>({
     title: '',
-    details: '',
+    description: '',
     subject: '',
     deadline: '',
     budgetMin: undefined,
     budgetMax: undefined,
+    currency: undefined,
     mode: 'online',
+    contactName: '',
+    contactPhone: '',
+    contactEmail: '',
+    reqAddressLine: '',
+    reqCountryCode: '',
+    reqStateCode: '',
+    reqCityName: '',
+    reqZip: '',
+    preferredLanguage: '',
   })
 
   React.useEffect(() => {
     if (!open) {
       setStep('pick')
       setCategory(null)
+      setUseProfile(false)
       setTutorData({
         title: '',
-        details: '',
+        description: '',
         subject: '',
         level: '',
         schedule: '',
         startDate: '',
         budgetMin: undefined,
         budgetMax: undefined,
+        currency: undefined,
         mode: 'online',
         cityPref: '',
+        contactName: '',
+        contactPhone: '',
+        contactEmail: '',
+        reqAddressLine: '',
+        reqCountryCode: '',
+        reqStateCode: '',
+        reqCityName: '',
+        reqZip: '',
+        preferredLanguage: '',
       })
       setAssignmentData({
         title: '',
-        details: '',
+        description: '',
         subject: '',
         deadline: '',
         budgetMin: undefined,
         budgetMax: undefined,
+        currency: undefined,
         mode: 'online',
+        contactName: '',
+        contactPhone: '',
+        contactEmail: '',
+        reqAddressLine: '',
+        reqCountryCode: '',
+        reqStateCode: '',
+        reqCityName: '',
+        reqZip: '',
+        preferredLanguage: '',
       })
     }
   }, [open])
@@ -118,45 +166,103 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
     if (!category) return false
     if (category === 'PROJECT_HELP') {
       const d = assignmentData
-      return d.title.trim().length >= 3 && d.subject.trim().length >= 2 && d.details.trim().length >= 10
+      return d.title.trim().length >= 3 && d.subject.trim().length >= 2 && d.description.trim().length >= 10
     }
     const d = tutorData
-    return d.title.trim().length >= 3 && d.subject.trim().length >= 2 && d.details.trim().length >= 10
+    return d.title.trim().length >= 3 && d.subject.trim().length >= 2 && d.description.trim().length >= 10
   }, [category, assignmentData, tutorData])
 
-  async function onSubmit() {
+  async function hydrateFromProfile() {
     try {
-      if (!category) return
+      setLoadingProfile(true)
+      const res = await fetch('/api/students/me', { credentials: 'include' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error ?? 'Failed to load profile')
 
-      // Minimal, API-friendly payload.
-      // Your /api/requests route can persist extra fields or pack them into a JSON column if needed.
-      const payload =
-        category === 'PROJECT_HELP'
-          ? {
-              title: assignmentData.title,
-              description: assignmentData.details,
-              type: category,
-              subject: assignmentData.subject,
-              deadline: assignmentData.deadline || null,
-              budgetMin: assignmentData.budgetMin ?? null,
-              budgetMax: assignmentData.budgetMax ?? null,
-              mode: assignmentData.mode ?? 'online',
-              userId, // optional
-            }
-          : {
-              title: tutorData.title,
-              description: tutorData.details,
-              type: category,
-              subject: tutorData.subject,
-              level: tutorData.level || null,
-              schedule: tutorData.schedule || null,
-              startDate: tutorData.startDate || null,
-              budgetMin: tutorData.budgetMin ?? null,
-              budgetMax: tutorData.budgetMax ?? null,
-              mode: tutorData.mode ?? 'online',
-              cityPref: tutorData.cityPref || null,
-              userId, // optional
-            }
+      const profile = json as {
+        name?: string | null
+        phone?: string | null
+        addressLine?: string | null
+        countryCode?: string | null
+        stateCode?: string | null
+        cityName?: string | null
+        zip?: string | null
+      }
+
+      if (category === 'PROJECT_HELP') {
+        setAssignmentData((prev) => ({
+          ...prev,
+          contactName: profile.name ?? prev.contactName,
+          contactPhone: profile.phone ?? prev.contactPhone,
+          reqAddressLine: profile.addressLine ?? prev.reqAddressLine,
+          reqCountryCode: profile.countryCode ?? prev.reqCountryCode,
+          reqStateCode: profile.stateCode ?? prev.reqStateCode,
+          reqCityName: profile.cityName ?? prev.reqCityName,
+          reqZip: profile.zip ?? prev.reqZip,
+        }))
+      } else if (category) {
+        setTutorData((prev) => ({
+          ...prev,
+          contactName: profile.name ?? prev.contactName,
+          contactPhone: profile.phone ?? prev.contactPhone,
+          reqAddressLine: profile.addressLine ?? prev.reqAddressLine,
+          reqCountryCode: profile.countryCode ?? prev.reqCountryCode,
+          reqStateCode: profile.stateCode ?? prev.reqStateCode,
+          reqCityName: profile.cityName ?? prev.reqCityName,
+          reqZip: profile.zip ?? prev.reqZip,
+        }))
+      }
+    } catch (err: any) {
+      setUseProfile(false)
+    } finally {
+      setLoadingProfile(false)
+    }
+  }
+
+  React.useEffect(() => {
+    if (useProfile && category) void hydrateFromProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useProfile, category])
+
+  async function onSubmit() {
+    if (!category) return
+    const d = category === 'PROJECT_HELP' ? assignmentData : tutorData
+
+    try {
+      const payload = {
+        title: d.title,
+        description: d.description,
+        type: category,
+        subject: d.subject || null,
+
+        // time & language
+        schedule: category === 'PROJECT_HELP' ? null : (tutorData.schedule || null),
+        deadline: category === 'PROJECT_HELP' ? (assignmentData.deadline || null) : null,
+        preferredLanguage: d.preferredLanguage || null,
+
+        // money/mode
+        budgetMin: d.budgetMin ?? null,
+        budgetMax: d.budgetMax ?? null,
+        currency: d.currency ?? null,
+        mode: d.mode ?? 'online',
+
+        // contact
+        contactName: d.contactName || null,
+        contactPhone: d.contactPhone || null,
+        contactEmail: d.contactEmail || null,
+
+        // full address
+        reqAddressLine: d.reqAddressLine || null,
+        reqCountryCode: d.reqCountryCode || null,
+        reqStateCode: d.reqStateCode || null,
+        reqCityName: d.reqCityName || null,
+        reqZip: d.reqZip || null,
+
+        // behavior flag for server to merge profile if needed
+        useProfile,
+
+        userId, // optional; backend defaults to session
+      }
 
       const res = await fetch('/api/requests', {
         method: 'POST',
@@ -167,14 +273,11 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error ?? 'Failed to create request')
 
-      toast({ title: 'Request submitted', description: 'Our team will review and match the best tutor.' })
+      // success
       onOpenChange(false)
     } catch (err: any) {
-      toast({
-        title: 'Failed to submit',
-        description: err?.message ?? 'Something went wrong',
-        variant: 'destructive',
-      })
+      // surface API validation errors (e.g., missing fields for onsite)
+      alert(err?.message ?? 'Failed to submit')
     }
   }
 
@@ -191,31 +294,16 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
               <motion.div key="pick" variants={fade} initial="hidden" animate="visible" exit="exit">
                 <p className="text-sm text-muted-foreground">What are you looking for today? Choose one:</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <PickCard
-                    icon={<GraduationCap className="h-6 w-6" />}
-                    title="Hire Tutor"
-                    desc="Subject experts for school, college & beyond."
-                    onClick={() => handlePick('HIRE_TUTOR')}
-                  />
-                  <PickCard
-                    icon={<BookOpen className="h-6 w-6" />}
-                    title="Hire Quran Tutor"
-                    desc="Quran reading, Tajweed & Islamic studies."
-                    onClick={() => handlePick('HIRE_QURAN')}
-                  />
-                  <PickCard
-                    icon={<PenLine className="h-6 w-6" />}
-                    title="Assignment / Project"
-                    desc="Get help with assignments & projects."
-                    onClick={() => handlePick('PROJECT_HELP')}
-                  />
+                  <PickCard icon={<GraduationCap className="h-6 w-6" />} title="Hire Tutor" desc="Subject experts for school, college & beyond." onClick={() => handlePick('HIRE_TUTOR')} />
+                  <PickCard icon={<BookOpen className="h-6 w-6" />} title="Hire Quran Tutor" desc="Quran reading, Tajweed & Islamic studies." onClick={() => handlePick('HIRE_QURAN')} />
+                  <PickCard icon={<PenLine className="h-6 w-6" />} title="Assignment / Project" desc="Get help with assignments & projects." onClick={() => handlePick('PROJECT_HELP')} />
                 </div>
               </motion.div>
             )}
 
             {step === 'form' && category && (
               <motion.div key="form" variants={fade} initial="hidden" animate="visible" exit="exit">
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-semibold">
                       {category === 'PROJECT_HELP'
@@ -226,9 +314,18 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                     </h3>
                     <p className="text-xs text-muted-foreground">Provide details to help us match you accurately.</p>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => setStep('pick')}>
-                    Change
-                  </Button>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs">Use my profile info</label>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={useProfile}
+                      onChange={(e) => setUseProfile(e.target.checked)}
+                      disabled={loadingProfile}
+                      title="Copy contact and address from your profile"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -242,11 +339,9 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                           ? setAssignmentData({ ...assignmentData, title: e.target.value })
                           : setTutorData({ ...tutorData, title: e.target.value })
                       }
-                      placeholder={
-                        category === 'PROJECT_HELP'
-                          ? 'e.g., Need help with DBMS assignment'
-                          : 'e.g., Looking for a Math tutor (Grade 9)'
-                      }
+                      placeholder={category === 'PROJECT_HELP'
+                        ? 'e.g., Need help with DBMS assignment'
+                        : 'e.g., Looking for a Math tutor (Grade 9)'}
                     />
                   </div>
 
@@ -312,6 +407,20 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                     />
                   </div>
 
+                  {/* Currency */}
+                  <div>
+                    <label className="mb-1 block text-xs font-medium">Currency</label>
+                    <Input
+                      value={(category === 'PROJECT_HELP' ? assignmentData.currency : tutorData.currency) ?? ''}
+                      onChange={(e) =>
+                        category === 'PROJECT_HELP'
+                          ? setAssignmentData({ ...assignmentData, currency: e.target.value })
+                          : setTutorData({ ...tutorData, currency: e.target.value })
+                      }
+                      placeholder="e.g., PKR / USD"
+                    />
+                  </div>
+
                   {/* Tutor-specific */}
                   {category !== 'PROJECT_HELP' && (
                     <>
@@ -339,14 +448,6 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                           onChange={(e) => setTutorData({ ...tutorData, startDate: e.target.value })}
                         />
                       </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium">City (for in-person)</label>
-                        <Input
-                          value={tutorData.cityPref ?? ''}
-                          onChange={(e) => setTutorData({ ...tutorData, cityPref: e.target.value })}
-                          placeholder="e.g., Lahore / Karachi (optional)"
-                        />
-                      </div>
                     </>
                   )}
 
@@ -362,15 +463,120 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                     </div>
                   )}
 
+                  {/* Contact */}
+                  <div className="sm:col-span-2 mt-2 grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">Contact Name</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.contactName ?? '') : (tutorData.contactName ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, contactName: e.target.value })
+                            : setTutorData({ ...tutorData, contactName: e.target.value })
+                        }
+                        placeholder="Your name"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">Contact Phone</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.contactPhone ?? '') : (tutorData.contactPhone ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, contactPhone: e.target.value })
+                            : setTutorData({ ...tutorData, contactPhone: e.target.value })
+                        }
+                        placeholder="03xx-xxxxxxx"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">Contact Email (optional)</label>
+                      <Input
+                        type="email"
+                        value={category === 'PROJECT_HELP' ? (assignmentData.contactEmail ?? '') : (tutorData.contactEmail ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, contactEmail: e.target.value })
+                            : setTutorData({ ...tutorData, contactEmail: e.target.value })
+                        }
+                        placeholder="you@example.com"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-xs font-medium">Address Line</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.reqAddressLine ?? '') : (tutorData.reqAddressLine ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, reqAddressLine: e.target.value })
+                            : setTutorData({ ...tutorData, reqAddressLine: e.target.value })
+                        }
+                        placeholder="Street / Area"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">City</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.reqCityName ?? '') : (tutorData.reqCityName ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, reqCityName: e.target.value })
+                            : setTutorData({ ...tutorData, reqCityName: e.target.value })
+                        }
+                        placeholder="e.g., Lahore"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">State / Province</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.reqStateCode ?? '') : (tutorData.reqStateCode ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, reqStateCode: e.target.value })
+                            : setTutorData({ ...tutorData, reqStateCode: e.target.value })
+                        }
+                        placeholder="e.g., PB"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">Country Code</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.reqCountryCode ?? '') : (tutorData.reqCountryCode ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, reqCountryCode: e.target.value })
+                            : setTutorData({ ...tutorData, reqCountryCode: e.target.value })
+                        }
+                        placeholder="e.g., PK"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium">ZIP / Postal</label>
+                      <Input
+                        value={category === 'PROJECT_HELP' ? (assignmentData.reqZip ?? '') : (tutorData.reqZip ?? '')}
+                        onChange={(e) =>
+                          category === 'PROJECT_HELP'
+                            ? setAssignmentData({ ...assignmentData, reqZip: e.target.value })
+                            : setTutorData({ ...tutorData, reqZip: e.target.value })
+                        }
+                        placeholder="e.g., 54000"
+                      />
+                    </div>
+                  </div>
+
                   {/* Details */}
                   <div className="sm:col-span-2">
                     <label className="mb-1 block text-xs font-medium">Details</label>
                     <Textarea
-                      value={category === 'PROJECT_HELP' ? assignmentData.details : tutorData.details}
+                      value={category === 'PROJECT_HELP' ? assignmentData.description : tutorData.description}
                       onChange={(e) =>
                         category === 'PROJECT_HELP'
-                          ? setAssignmentData({ ...assignmentData, details: e.target.value })
-                          : setTutorData({ ...tutorData, details: e.target.value })
+                          ? setAssignmentData({ ...assignmentData, description: e.target.value })
+                          : setTutorData({ ...tutorData, description: e.target.value })
                       }
                       placeholder={
                         category === 'PROJECT_HELP'
@@ -380,15 +586,25 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                       className="min-h-[96px]"
                     />
                   </div>
+
+                  {/* Language (optional) */}
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-medium">Preferred Language (optional)</label>
+                    <Input
+                      value={category === 'PROJECT_HELP' ? (assignmentData.preferredLanguage ?? '') : (tutorData.preferredLanguage ?? '')}
+                      onChange={(e) =>
+                        category === 'PROJECT_HELP'
+                          ? setAssignmentData({ ...assignmentData, preferredLanguage: e.target.value })
+                          : setTutorData({ ...tutorData, preferredLanguage: e.target.value })
+                      }
+                      placeholder="e.g., English / Urdu"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between">
-                  <Button variant="ghost" onClick={() => setStep('pick')}>
-                    Back
-                  </Button>
-                  <Button disabled={!canContinueForm} onClick={() => setStep('review')}>
-                    Continue
-                  </Button>
+                  <Button variant="ghost" onClick={() => setStep('pick')}>Back</Button>
+                  <Button disabled={!canContinueForm} onClick={() => setStep('review')}>Continue</Button>
                 </div>
               </motion.div>
             )}
@@ -402,27 +618,19 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                   <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Row
                       label="Category"
-                      value={
-                        category === 'PROJECT_HELP'
-                          ? 'Assignment / Project'
-                          : category === 'HIRE_QURAN'
-                          ? 'Quran Tutor'
-                          : 'Tutor'
-                      }
+                      value={category === 'PROJECT_HELP' ? 'Assignment / Project' : category === 'HIRE_QURAN' ? 'Quran Tutor' : 'Tutor'}
                     />
                     <Row label="Subject" value={category === 'PROJECT_HELP' ? assignmentData.subject : tutorData.subject} />
                     <Row label="Mode" value={(category === 'PROJECT_HELP' ? assignmentData.mode : tutorData.mode) ?? '—'} />
                     <Row
                       label="Budget"
-                      value={`${(category === 'PROJECT_HELP' ? assignmentData.budgetMin : tutorData.budgetMin) ?? '—'} - ${(category === 'PROJECT_HELP' ? assignmentData.budgetMax : tutorData.budgetMax) ?? '—'}`}
+                      value={`${(category === 'PROJECT_HELP' ? assignmentData.budgetMin : tutorData.budgetMin) ?? '—'} - ${(category === 'PROJECT_HELP' ? assignmentData.budgetMax : tutorData.budgetMax) ?? '—'} ${(category === 'PROJECT_HELP' ? assignmentData.currency : tutorData.currency) ?? ''}`}
                     />
-
                     {category !== 'PROJECT_HELP' ? (
                       <>
                         <Row label="Level" value={tutorData.level || '—'} />
                         <Row label="Schedule" value={tutorData.schedule || '—'} />
                         <Row label="Start Date" value={tutorData.startDate || '—'} />
-                        <Row label="City" value={tutorData.cityPref || '—'} />
                       </>
                     ) : (
                       <Row label="Deadline" value={assignmentData.deadline || '—'} />
@@ -435,16 +643,42 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
                     <div className="sm:col-span-2">
                       <dt className="text-muted-foreground">Details</dt>
                       <dd className="whitespace-pre-wrap">
-                        {category === 'PROJECT_HELP' ? assignmentData.details : tutorData.details}
+                        {category === 'PROJECT_HELP' ? assignmentData.description : tutorData.description}
                       </dd>
+                    </div>
+
+                    {/* Contact review */}
+                    <div className="sm:col-span-2 mt-2 grid gap-2 sm:grid-cols-3">
+                      <Row label="Contact Name" value={category === 'PROJECT_HELP' ? assignmentData.contactName : tutorData.contactName} />
+                      <Row label="Contact Phone" value={category === 'PROJECT_HELP' ? assignmentData.contactPhone : tutorData.contactPhone} />
+                      <Row label="Contact Email" value={category === 'PROJECT_HELP' ? assignmentData.contactEmail : tutorData.contactEmail} />
+                    </div>
+
+                    {/* Address review */}
+                    <div className="sm:col-span-2 mt-2 grid gap-2 sm:grid-cols-2">
+                      <Row label="Address" value={category === 'PROJECT_HELP' ? assignmentData.reqAddressLine : tutorData.reqAddressLine} />
+                      <Row
+                        label="Region"
+                        value={
+                          [
+                            category === 'PROJECT_HELP' ? assignmentData.reqCityName : tutorData.reqCityName,
+                            category === 'PROJECT_HELP' ? assignmentData.reqStateCode : tutorData.reqStateCode,
+                            category === 'PROJECT_HELP' ? assignmentData.reqCountryCode : tutorData.reqCountryCode,
+                          ].filter(Boolean).join(', ') || '—'
+                        }
+                      />
+                      <Row label="ZIP" value={category === 'PROJECT_HELP' ? assignmentData.reqZip : tutorData.reqZip} />
+                    </div>
+
+                    {/* Language */}
+                    <div className="sm:col-span-2">
+                      <Row label="Preferred Language" value={category === 'PROJECT_HELP' ? assignmentData.preferredLanguage : tutorData.preferredLanguage} />
                     </div>
                   </dl>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between">
-                  <Button variant="ghost" onClick={() => setStep('form')}>
-                    Back
-                  </Button>
+                  <Button variant="ghost" onClick={() => setStep('form')}>Back</Button>
                   <Button onClick={onSubmit}>Submit Request</Button>
                 </div>
               </motion.div>
@@ -456,19 +690,7 @@ export function NewRequestDialog({ open, onOpenChange, userId }: NewRequestDialo
   )
 }
 
-/* ── Small parts ───────────────────────────────────────── */
-
-function PickCard({
-  icon,
-  title,
-  desc,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc: string
-  onClick: () => void
-}) {
+function PickCard({ icon, title, desc, onClick }: { icon: React.ReactNode; title: string; desc: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -488,7 +710,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dd className="font-medium">{value || '—'}</dd>
     </div>
   )
 }

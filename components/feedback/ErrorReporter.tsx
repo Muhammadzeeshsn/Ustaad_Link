@@ -1,60 +1,90 @@
 // components/feedback/ErrorReporter.tsx
 "use client"
 
-import { useState } from "react"
-import { BrandButton } from "@/components/brand/BrandButton"
+import * as React from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/use-toast"
 
 type Props = {
   defaultMessage?: string
-  path?: string
-  onSent?: () => void
+  triggerText?: string
+  triggerClassName?: string
 }
 
-export default function ErrorReporter({ defaultMessage = "", path, onSent }: Props) {
-  const [text, setText] = useState(defaultMessage)
-  const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
-  const page = path || (typeof window !== "undefined" ? window.location.pathname : "")
+export default function ErrorReporter({
+  defaultMessage = "",
+  triggerText = "Report this to Admin",
+  triggerClassName,
+}: Props) {
+  const { toast } = useToast()
+  const [open, setOpen] = React.useState(false)
+  const [message, setMessage] = React.useState(defaultMessage)
+  const [submitting, setSubmitting] = React.useState(false)
 
   async function submit() {
-    if (!text.trim() || sending) return
-    setSending(true)
+    if (!message.trim()) {
+      toast({ title: "Please describe the issue", variant: "destructive" })
+      return
+    }
+    setSubmitting(true)
     try {
       const res = await fetch("/api/report-error", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text.trim(),
-          page,
+          message,
+          pageUrl: typeof window !== "undefined" ? window.location.href : null,
         }),
       })
-      if (!res.ok) throw new Error("send_failed")
-      setSent(true)
-      onSent?.()
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || "Failed to submit")
+      toast({ title: "Thanks!", description: "Your report was sent to the admin." })
+      setOpen(false)
+      setMessage("")
+    } catch (e: any) {
+      toast({
+        title: "Could not send report",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      })
     } finally {
-      setSending(false)
+      setSubmitting(false)
     }
   }
 
-  if (sent) {
-    return <div className="text-sm text-emerald-600">Thanks — your report was sent to the admin.</div>
-  }
-
   return (
-    <div className="mt-3 space-y-2">
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={3}
-        className="w-full rounded-md border p-2 text-sm"
-        placeholder="Describe what you were doing when this happened…"
-      />
-      <div className="flex gap-2">
-        <BrandButton type="button" onClick={submit} disabled={sending || !text.trim()}>
-          {sending ? "Sending…" : "Send to Admin"}
-        </BrandButton>
-        <div className="text-xs text-slate-500">We’ll include page, your user ID (if logged in), and IP automatically.</div>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className={triggerClassName}>
+          {triggerText}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Report an issue</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Tell us what went wrong. We’ll include your page link, account (if logged in), and IP for troubleshooting.
+          </p>
+          <Textarea
+            rows={6}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="What happened? Steps to reproduce are super helpful."
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={submitting}>
+              {submitting ? "Sending…" : "Send to Admin"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
