@@ -215,10 +215,8 @@ export default function EditStudent() {
         description={errorMsg || "An unexpected error occurred."}
         onOpenChange={setErrorOpen}
       >
-        <ErrorReporter
-          defaultMessage={errorMsg || "Unknown error"}
-          path="/dashboard/student/profile"
-        />
+     <ErrorReporter defaultMessage={errorMsg || "Unknown error"} />
+
       </ErrorDialog>
 
       <div className="mb-4">

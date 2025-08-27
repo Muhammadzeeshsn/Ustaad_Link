@@ -1,7 +1,9 @@
+// app/api/assignments/[id]/accept/route.ts
+
 import { cookies } from "next/headers";
 import { verifySession } from "@/app/lib/jwt";
-import { prisma } from "@/app/lib/db";
-import { AssignmentStatus, RequestStatus } from "@prisma/client";
+import { prisma, $Enums } from "@/app/lib/prisma";
+
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   const c = cookies().get("ul_session")?.value;
@@ -13,12 +15,12 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
 
   const row = await prisma.assignment.update({
     where: { id: params.id },
-    data: { status: AssignmentStatus.ACCEPTED }, // << enum
+    data: { status: $Enums.AssignmentStatus.ACCEPTED }, // << enum
   });
 
   await prisma.request.update({
     where: { id: row.requestId },
-    data: { status: RequestStatus.IN_PROGRESS }, // << enum
+    data: { status: $Enums.RequestStatus.ASSIGNED }, // << enum
   });
 
   return Response.json({ data: row });

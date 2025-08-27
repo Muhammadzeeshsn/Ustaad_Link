@@ -1,15 +1,12 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from 'next/server'
-import { PrismaClient, Role, UserStatus, TutorStatus } from '@prisma/client'
+import { prisma, $Enums } from '@/app/lib/prisma'
 import bcrypt from 'bcryptjs'
-
-const prisma: PrismaClient = (global as any).__PRISMA__ ?? new PrismaClient()
-if (!(global as any).__PRISMA__) (global as any).__PRISMA__ = prisma
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const role = (body.role || 'STUDENT') as Role
+    const role = (body.role || 'STUDENT') as $Enums.Role
     const name = (body.name || '').toString().trim()
     const phone = (body.phone || '').toString().trim() || null
     const email = (body.email || '').toString().trim().toLowerCase()
@@ -34,7 +31,7 @@ export async function POST(req: Request) {
         email,
         hashedPassword: hashed,
         role,
-        status: UserStatus.PENDING,
+        status: $Enums.UserStatus.PENDING,
         ...(role === 'STUDENT'
           ? {
               student: {
@@ -51,7 +48,7 @@ export async function POST(req: Request) {
                   bio: null,
                   subjects: [],
                   experienceYears: null,
-                  status: TutorStatus.PENDING,
+                  status: $Enums.TutorStatus.PENDING,
                 },
               },
             }),

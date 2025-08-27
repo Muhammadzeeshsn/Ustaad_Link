@@ -3,6 +3,8 @@ import { NextResponse } from "next/server"
 import crypto from "crypto"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/app/lib/prisma"
+import type { Prisma } from "@prisma/client"
+
 
 function sha(s: string) {
   return crypto.createHash("sha256").update(s).digest("hex")
@@ -43,7 +45,7 @@ export async function POST(req: Request) {
     if (otp.codeHash !== sha(code)) return NextResponse.json({ error: "invalid_code" }, { status: 400 })
 
     // Do all side effects atomically; mark OTP used only if all succeeds.
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       if (reason === "register") {
         const payload = body.payload || {}
         const name: string = (payload.name ?? "").trim()

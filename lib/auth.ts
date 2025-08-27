@@ -4,6 +4,8 @@ import type { Session } from "next-auth"
 
 // IMPORTANT: This import must point to the app router auth route.
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+export { authOptions }
+
 
 export async function auth(): Promise<Session | null> {
   return getServerSession(authOptions)
