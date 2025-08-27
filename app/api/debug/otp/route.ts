@@ -1,4 +1,5 @@
 // app/api/debug/otp/route.ts  -- remove in production
+
 import { NextResponse } from "next/server"
 import { prisma } from "@/app/lib/prisma"
 import type { OtpChallenge } from "@prisma/client"

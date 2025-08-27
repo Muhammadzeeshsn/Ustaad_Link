@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
-type Role = $Enums.Role
 type Body = {
   email: string;
   password: string;
