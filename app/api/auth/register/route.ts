@@ -44,11 +44,10 @@ export async function POST(req: Request) {
           : {
               tutor: {
                 create: {
-                  name: name || null,
                   bio: null,
-                  subjects: [],
-                  experienceYears: null,
-                  status: $Enums.TutorStatus.PENDING,
+                  subjects: null,
+                  experience: null,
+                  hourlyRate: null,
                 },
               },
             }),

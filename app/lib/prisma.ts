@@ -11,5 +11,5 @@ export const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
-// Re-export enums to make usage ergonomic: $Enums.RequestStatus, etc.
-export * as $Enums from "@prisma/client"
+// Re-export Prisma enums for ergonomic access like $Enums.RequestStatus
+export { $Enums } from "@prisma/client"
