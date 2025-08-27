@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@prisma/client";
+import type { Role } from "@/types/prisma";
 import bcrypt from "bcryptjs";
 
 type Body = {

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Mode, RequestStatus, RequestType } from "@prisma/client";
+import { Mode, RequestStatus, RequestType } from "@/types/prisma";
 
 /* ========= Types ========= */
 
@@ -11,8 +11,8 @@ type RequestRow = {
   id: string;
   title: string | null;
   description: string | null;
-  type: string;              // lowercased for UI
-  status: string;            // lowercased for UI
+  type: string; // lowercased for UI
+  status: string; // lowercased for UI
   createdAt: string;
 
   subject?: string | null;
@@ -43,10 +43,10 @@ type IncomingBody = {
 
   // learning fields
   subject?: string | null;
-  level?: string | null;          // no column
-  schedule?: string | null;       // -> preferredTimeStart
-  startDate?: string | null;      // no column
-  deadline?: string | null;       // -> preferredTimeEnd
+  level?: string | null; // no column
+  schedule?: string | null; // -> preferredTimeStart
+  startDate?: string | null; // no column
+  deadline?: string | null; // -> preferredTimeEnd
 
   // money/mode
   budgetMin?: number | null;
@@ -72,7 +72,7 @@ type IncomingBody = {
   useProfile?: boolean | null;
 
   // tech
-  userId?: string | null;         // optional override; usually not needed
+  userId?: string | null; // optional override; usually not needed
 };
 
 /* ========= Utils ========= */
@@ -80,9 +80,9 @@ type IncomingBody = {
 function normalizeModeToEnum(m: IncomingMode): Mode | null {
   if (!m) return null;
   const v = m.toLowerCase();
-  if (v === "online") return "ONLINE";
-  if (v === "onsite") return "ONSITE";
-  if (v === "hybrid") return "HYBRID";
+  if (v === "online") return Mode.ONLINE;
+  if (v === "onsite") return Mode.ONSITE;
+  if (v === "hybrid") return Mode.HYBRID;
   return null;
 }
 
@@ -122,12 +122,18 @@ function mapDbToRequestRow(r: {
       : null;
 
   const mode =
-    r.mode === "ONLINE" ? "online" :
-    r.mode === "ONSITE" ? "onsite" :
-    r.mode === "HYBRID" ? "hybrid" : null;
+    r.mode === "ONLINE"
+      ? "online"
+      : r.mode === "ONSITE"
+      ? "onsite"
+      : r.mode === "HYBRID"
+      ? "hybrid"
+      : null;
 
   const location =
-    [r.reqCityName, r.reqStateCode, r.reqCountryCode].filter(Boolean).join(", ") || null;
+    [r.reqCityName, r.reqStateCode, r.reqCountryCode]
+      .filter(Boolean)
+      .join(", ") || null;
 
   return {
     id: r.id,
@@ -158,15 +164,18 @@ function mapDbToRequestRow(r: {
   };
 }
 
-function mergeProfileIntoPayload<T extends IncomingBody>(body: T, profile?: {
-  name?: string | null;
-  phone?: string | null;
-  addressLine?: string | null;
-  countryCode?: string | null;
-  stateCode?: string | null;
-  cityName?: string | null;
-  zip?: string | null;
-}) {
+function mergeProfileIntoPayload<T extends IncomingBody>(
+  body: T,
+  profile?: {
+    name?: string | null;
+    phone?: string | null;
+    addressLine?: string | null;
+    countryCode?: string | null;
+    stateCode?: string | null;
+    cityName?: string | null;
+    zip?: string | null;
+  }
+) {
   if (!profile) return body;
 
   return {
@@ -199,7 +208,8 @@ function requireOnsiteAddress(body: IncomingBody) {
 // GET /api/requests — student’s requests
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = (session.user as { id: string }).id;
 
@@ -239,17 +249,22 @@ export async function GET() {
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     console.error("GET /api/requests error:", err);
-    return NextResponse.json({ error: "Failed to fetch requests" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch requests" },
+      { status: 500 }
+    );
   }
 }
 
 // POST /api/requests — create request (stores ALL fields; auto-fill from profile when needed)
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sessionUserId = (session.user as { id: string }).id;
-  const sessionEmail = (session.user as { email?: string | null }).email ?? null;
+  const sessionEmail =
+    (session.user as { email?: string | null }).email ?? null;
 
   try {
     let body = (await req.json()) as IncomingBody;
@@ -262,16 +277,17 @@ export async function POST(req: Request) {
     const effectiveUserId = body.userId ?? sessionUserId;
 
     // Load student profile if requested OR if onsite and any field is missing
-    let profileToMerge: Parameters<typeof mergeProfileIntoPayload>[1] | undefined;
+    let profileToMerge:
+      | Parameters<typeof mergeProfileIntoPayload>[1]
+      | undefined;
     const needsProfileMerge =
       Boolean(body.useProfile) ||
-      modeEnum === "ONSITE" && (
-        !body.contactName ||
-        !body.contactPhone ||
-        !body.reqAddressLine ||
-        !body.reqCountryCode ||
-        !body.reqCityName
-      );
+      (modeEnum === "ONSITE" &&
+        (!body.contactName ||
+          !body.contactPhone ||
+          !body.reqAddressLine ||
+          !body.reqCountryCode ||
+          !body.reqCityName));
 
     if (needsProfileMerge) {
       const profile = await prisma.studentProfile.findUnique({
@@ -300,7 +316,11 @@ export async function POST(req: Request) {
       const missing = requireOnsiteAddress(body);
       if (missing.length) {
         return NextResponse.json(
-          { error: `Missing required fields for onsite request: ${missing.join(", ")}` },
+          {
+            error: `Missing required fields for onsite request: ${missing.join(
+              ", "
+            )}`,
+          },
           { status: 400 }
         );
       }
@@ -374,6 +394,9 @@ export async function POST(req: Request) {
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
     console.error("POST /api/requests error:", err);
-    return NextResponse.json({ error: "Failed to create request" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create request" },
+      { status: 500 }
+    );
   }
 }

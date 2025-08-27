@@ -2,8 +2,7 @@
 
 import { NextResponse } from "next/server"
 import { prisma } from "@/app/lib/prisma"
-import type { OtpChallenge } from "@prisma/client"
-
+import type { OtpChallenge } from "@/types/prisma"
 
 export async function GET(req: Request) {
   const url = new URL(req.url)

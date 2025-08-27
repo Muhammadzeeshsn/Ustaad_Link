@@ -1,7 +1,7 @@
 // app/api/auth/verify-email/route.ts
 
 import { prisma } from "@/app/lib/prisma";
-import { UserStatus } from "@prisma/client";
+import { UserStatus } from "@/types/prisma";
 import { consumeEmailToken } from "@/app/lib/tokens";
 import { NextResponse } from "next/server";
 

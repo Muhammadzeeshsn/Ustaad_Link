@@ -1,7 +1,7 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/prisma'
-import { Role, UserStatus } from '@prisma/client'
+import { Role, UserStatus } from '@/types/prisma'
 import bcrypt from 'bcryptjs'
 
 export async function POST(req: Request) {

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { verifySession } from "@/app/lib/jwt";
 import { prisma } from "@/app/lib/prisma";
-import { AssignmentStatus, RequestStatus } from "@prisma/client";
+import { AssignmentStatus, RequestStatus } from "@/types/prisma";
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   const c = cookies().get("ul_session")?.value;
