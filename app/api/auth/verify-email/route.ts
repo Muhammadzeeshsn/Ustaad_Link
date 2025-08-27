@@ -1,6 +1,7 @@
 // app/api/auth/verify-email/route.ts
 
-import { prisma, $Enums } from "@/app/lib/prisma";
+import { prisma } from "@/app/lib/prisma";
+import { UserStatus } from "@prisma/client";
 import { consumeEmailToken } from "@/app/lib/tokens";
 import { NextResponse } from "next/server";
 
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
 
   await prisma.user.update({
     where: { id: userId },
-    data: { status: $Enums.UserStatus.ACTIVE }, // << was "active"
+    data: { status: UserStatus.ACTIVE },
   });
 
   return NextResponse.redirect(`${process.env.SITE_URL}/auth?verify=ok`);

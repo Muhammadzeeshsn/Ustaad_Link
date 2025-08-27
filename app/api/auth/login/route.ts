@@ -1,7 +1,8 @@
 // app/api/auth/login/route.ts
 
 import { NextResponse } from "next/server";
-import { prisma, $Enums } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import type { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 type Role = $Enums.Role

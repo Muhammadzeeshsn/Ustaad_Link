@@ -2,8 +2,8 @@
 
 import { cookies } from "next/headers";
 import { verifySession } from "@/app/lib/jwt";
-import { prisma, $Enums } from "@/app/lib/prisma";
-
+import { prisma } from "@/app/lib/prisma";
+import { AssignmentStatus, RequestStatus } from "@prisma/client";
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   const c = cookies().get("ul_session")?.value;
@@ -15,12 +15,11 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
 
   const row = await prisma.assignment.update({
     where: { id: params.id },
-    data: { status: $Enums.AssignmentStatus.ACCEPTED }, // << enum
-  });
+data: { status: AssignmentStatus.ACCEPTED },  });
 
   await prisma.request.update({
     where: { id: row.requestId },
-    data: { status: $Enums.RequestStatus.ASSIGNED }, // << enum
+    data: { status: RequestStatus.ASSIGNED },
   });
 
   return Response.json({ data: row });

@@ -2,11 +2,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma, $Enums } from "@/lib/prisma";
-
-type Mode = $Enums.Mode
-type RequestStatus = $Enums.RequestStatus
-type RequestType = $Enums.RequestType
+import { prisma } from "@/lib/prisma";
+import type { Mode, RequestStatus, RequestType } from "@prisma/client";
 
 /* ========= Types ========= */
 

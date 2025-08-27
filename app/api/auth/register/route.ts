@@ -1,12 +1,13 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from 'next/server'
-import { prisma, $Enums } from '@/app/lib/prisma'
+import { prisma } from '@/app/lib/prisma'
+import { Role, UserStatus } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const role = (body.role || 'STUDENT') as $Enums.Role
+    const role = (body.role || 'STUDENT') as Role
     const name = (body.name || '').toString().trim()
     const phone = (body.phone || '').toString().trim() || null
     const email = (body.email || '').toString().trim().toLowerCase()
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
         email,
         hashedPassword: hashed,
         role,
-        status: $Enums.UserStatus.PENDING,
+        status: UserStatus.PENDING,
         ...(role === 'STUDENT'
           ? {
               student: {
