@@ -138,13 +138,13 @@ export default function AuthPage() {
   const [loginOtp, setLoginOtp] = useState("");
   const [loginChallengeId, setLoginChallengeId] = useState<string | null>(null);
 
-// Update the canSubmit function
-const canSubmit = useMemo(() => {
-  if (!emailOk(email) || password.length < 6) return false;
-  if (mode === 'signup' && name.trim().length < 2) return false;
-  if (mode === 'signup' && !phoneOk(phone)) return false; // Phone is required
-  return true;
-}, [email, password, mode, name, phone]);
+  // Update the canSubmit function
+  const canSubmit = useMemo(() => {
+    if (!emailOk(email) || password.length < 6) return false;
+    if (mode === "signup" && name.trim().length < 2) return false;
+    if (mode === "signup" && !phoneOk(phone)) return false; // Phone is required
+    return true;
+  }, [email, password, mode, name, phone]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -778,14 +778,14 @@ const canSubmit = useMemo(() => {
                           </label>
 
                           <label className="block text-sm font-medium">
-  Phone *
-  <PhoneInput 
-    value={phone} 
-    onChange={setPhone} 
-    className="mt-1"
-    required={true}
-  />
-</label>
+                            Phone *
+                            <PhoneInput
+                              value={phone}
+                              onChange={setPhone}
+                              className="mt-1"
+                              required={true}
+                            />
+                          </label>
 
                           <label className="block text-sm font-medium">
                             Email

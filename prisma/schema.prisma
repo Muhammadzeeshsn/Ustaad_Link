@@ -126,6 +126,7 @@ model TutorProfile {
   user   User   @relation(fields: [userId], references: [id])
 
   bio        String?
+  phone      String? 
   subjects   String?
   experience Int?
   hourlyRate Int?

@@ -40,11 +40,10 @@ export async function POST(req: Request) {
       },
       orderBy: { createdAt: "desc" },
     });
-    
+
     if (!otp) {
       return NextResponse.json({ error: "OTP_NOT_FOUND_OR_EXPIRED" }, { status: 400 });
     }
-    
     if (otp.codeHash !== sha(code)) {
       return NextResponse.json({ error: "invalid_code" }, { status: 400 });
     }
@@ -60,80 +59,84 @@ export async function POST(req: Request) {
         if (!password || password.length < 6) {
           throw new Error("password_required");
         }
-
-        // Validate phone format if provided
         if (phone && !phone.match(/^\+\d{1,3}\d{4,}$/)) {
           throw new Error("invalid_phone_format");
         }
 
-        // Hash the password before storing it
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Check if user already exists
         const existingUser = await tx.user.findFirst({
           where: { email, role },
+          select: { id: true, role: true },
         });
 
         if (existingUser) {
-          // Update existing user
+          // Ensure email verified + active
           await tx.user.update({
             where: { id: existingUser.id },
             data: {
               emailVerified: new Date(),
               status: "ACTIVE",
-              // Update phone in the appropriate profile
-              ...(phone && role === "STUDENT" ? {
-                studentProfile: {
-                  update: {
-                    phone: phone,
-                  },
-                },
-              } : {}),
-              ...(phone && role === "TUTOR" ? {
-                tutorProfile: {
-                  update: {
-                    phone: phone,
-                  },
-                },
-              } : {}),
+              name: name || null,
             },
           });
-        } else {
-          // Create new user with the correct relation names
-          const userData: Prisma.UserCreateInput = {
-            email,
-            name: name || null,
-            role,
-            hashedPassword,
-            status: "ACTIVE",
-            emailVerified: new Date(),
-            image: null,
-          };
 
-          // Add profile creation based on role
+          // Upsert the appropriate profile so we don't error if it doesn't exist
           if (role === "STUDENT") {
-            userData.studentProfile = {
-              create: {
-                name: name || null,
-                phone: phone || null,
-              },
-            };
+            await tx.studentProfile.upsert({
+              where: { userId: existingUser.id },
+              update: { phone: phone || undefined, name: name || undefined },
+              create: { userId: existingUser.id, phone: phone || null, name: name || null },
+            });
           } else if (role === "TUTOR") {
-            userData.tutorProfile = {
+            await tx.tutorProfile.upsert({
+              where: { userId: existingUser.id },
+              update: { phone: phone || undefined, /* keep optional fields as-is */ },
               create: {
-                name: name || null,
+                userId: existingUser.id,
                 phone: phone || null,
                 bio: null,
                 subjects: null,
                 experience: null,
                 hourlyRate: null,
               },
-            };
+            });
           }
-
-          await tx.user.create({
-            data: userData,
+        } else {
+          // Fresh user + profile
+          const user = await tx.user.create({
+            data: {
+              email,
+              name: name || null,
+              role,
+              hashedPassword,
+              status: "ACTIVE",
+              emailVerified: new Date(),
+              image: null,
+              ...(role === "STUDENT"
+                ? {
+                    studentProfile: {
+                      create: {
+                        name: name || null,
+                        phone: phone || null,
+                      },
+                    },
+                  }
+                : {
+                    tutorProfile: {
+                      create: {
+                        name: name || null,
+                        phone: phone || null,
+                        bio: null,
+                        subjects: null,
+                        experience: null,
+                        hourlyRate: null,
+                      },
+                    },
+                  }),
+            },
           });
+          // nothing else needed here
         }
       }
 
@@ -147,15 +150,13 @@ export async function POST(req: Request) {
   } catch (e: any) {
     console.error("[otp/verify] error:", e);
     const msg = String(e?.message || "");
-    
+
     if (msg === "password_required") {
       return NextResponse.json({ error: "password_required" }, { status: 400 });
     }
-    
     if (msg === "invalid_phone_format") {
       return NextResponse.json({ error: "invalid_phone_format" }, { status: 400 });
     }
-    
     return NextResponse.json({ error: "server_error", details: e.message }, { status: 500 });
   }
 }

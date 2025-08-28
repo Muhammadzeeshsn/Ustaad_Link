@@ -35,18 +35,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "invalid_request" }, { status: 400 })
     }
 
-    // ---------- 1) PRE‑FLIGHT: block if email already exists ----------
+    // 1) Registration preflight checks
     if (reason === "register") {
-const existingByEmail = await prisma.user.findFirst({ where: { email } })
-if (existingByEmail) {
-  return NextResponse.json({ error: "EMAIL_EXISTS" }, { status: 409 })
-}      if (existingByEmail) {
+      const existingByEmail = await prisma.user.findFirst({ where: { email } })
+      if (existingByEmail) {
         return NextResponse.json({ error: "EMAIL_EXISTS" }, { status: 409 })
       }
 
-      // ---------- 2) PRE‑FLIGHT: block if phone already linked ----------
+      // Phone uniqueness across both profile tables
       if (phoneRaw) {
-        // Check both possible profile tables and surface the owner email if found
         const existingSP = await prisma.studentProfile.findFirst({
           where: { phone: phoneRaw },
           include: { user: { select: { email: true } } },
@@ -67,8 +64,7 @@ if (existingByEmail) {
       }
     }
 
-    // ---------- 3) COOLDOWN / THROTTLE ----------
-    // Find the most recent challenge for this email+reason and enforce a simple cooldown
+    // 2) Cooldown
     const last = await prisma.otpChallenge.findFirst({
       where: { email, reason },
       orderBy: { createdAt: "desc" },
@@ -83,7 +79,7 @@ if (existingByEmail) {
       }
     }
 
-    // ---------- 4) Create a fresh OTP ----------
+    // 3) Create OTP
     const code = sixDigits()
     const codeHash = sha(code)
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000)
@@ -93,7 +89,7 @@ if (existingByEmail) {
       select: { id: true },
     })
 
-    // ---------- 5) Send email ----------
+    // 4) Email
     const subject =
       reason === "register"
         ? "Verify your email — UstaadLink"
