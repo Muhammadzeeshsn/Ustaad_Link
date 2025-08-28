@@ -1,50 +1,54 @@
-// app/api/auth/register/route.ts
-import { NextResponse } from 'next/server'
-import { prisma } from '@/app/lib/prisma'
-import { Role, UserStatus } from '@/types/prisma'
-import bcrypt from 'bcryptjs'
-
+import { NextResponse } from "next/server";
+import { prisma } from "@/app/lib/prisma";
+import { Role, UserStatus } from "@/types/prisma";
+import bcrypt from "bcryptjs";
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const role = (body.role || 'STUDENT') as Role
-    const name = (body.name || '').toString().trim()
-    const phone = (body.phone || '').toString().trim() || null
-    const email = (body.email || '').toString().trim().toLowerCase()
-    const password = (body.password || '').toString()
-
+    const body = await req.json();
+    const role = (body.role || "STUDENT") as Role;
+    const name = (body.name || "").toString().trim();
+    const phone = (body.phone || "").toString().trim() || null;
+    const email = (body.email || "").toString().trim().toLowerCase();
+    const password = (body.password || "").toString();
     if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Email and password are required" },
+        { status: 400 }
+      );
     }
-    if (!['STUDENT', 'TUTOR'].includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    if (!["STUDENT", "TUTOR"].includes(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
-
-    const existing = await prisma.user.findUnique({ where: { email } })
+    // Validate phone format if provided
+    if (phone && !phone.match(/^\+\d{1,3}\d{4,}$/)) {
+      return NextResponse.json(
+        { error: "Invalid phone number format" },
+        { status: 400 }
+      );
+    }
+    const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      return NextResponse.json({ error: 'Email already in use' }, { status: 409 })
+      return NextResponse.json(
+        { error: "Email already in use" },
+        { status: 409 }
+      );
     }
-
-    const hashed = await bcrypt.hash(password, 10)
-
+    const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         email,
         hashedPassword: hashed,
         role,
         status: UserStatus.PENDING,
-        ...(role === 'STUDENT'
+        ...(role === "STUDENT"
           ? {
-              student: {
-                create: {
-                  name: name || null,
-                  phone,
-                },
-              },
+              student: { create: { name: name || null, phone } },
             }
           : {
               tutor: {
                 create: {
+                  name: name || null,
+                  phone,
                   bio: null,
                   subjects: null,
                   experience: null,
@@ -54,13 +58,13 @@ export async function POST(req: Request) {
             }),
       },
       select: { id: true, email: true, role: true },
-    })
-
-    // You can trigger a verification email here if desired.
-
-    return NextResponse.json({ ok: true, user })
+    });
+    return NextResponse.json({ ok: true, user });
   } catch (e: any) {
-    console.error('register error:', e)
-    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
+    console.error("register error:", e);
+    return NextResponse.json(
+      { error: e?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
