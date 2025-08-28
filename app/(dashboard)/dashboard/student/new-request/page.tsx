@@ -1,3 +1,4 @@
+// app/(dashboard)/dashboard/student/new-request/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -19,48 +20,27 @@ import {
 } from '@/components/ui/breadcrumb'
 import { useToast } from '@/components/ui/use-toast'
 
+// ✅ Use your project’s PhoneInput component.
+//   (If your path differs, adjust only this import.)
+import {PhoneInput} from '@/components/ui/phone-input'
+
+// ✅ Use your error form (note your folder name is “feeback”)
+import ErrorReporter from '@/components/feedback/ErrorReporter'
+
 /* -------------------- constants & helpers -------------------- */
 
 const SUBJECTS = [
-  'Mathematics',
-  'Additional Mathematics',
-  'Statistics',
-  'Physics',
-  'Chemistry',
-  'Biology',
-  'Computer Science',
-  'Programming',
-  'Algorithms',
-  'Data Structures',
-  'English',
-  'Urdu',
-  'Islamiyat',
-  'Pakistan Studies',
-  'History',
-  'Geography',
-  'Economics',
-  'Accounting',
-  'Business Studies',
-  'Marketing',
-  'Finance',
-  'Sociology',
-  'Psychology',
-  'Philosophy',
-  'Law',
-  'Arabic',
-  'French',
-  'Quran',
-  'Tajweed',
-  'Hadith',
-  'Tafseer',
+  'Mathematics','Additional Mathematics','Statistics','Physics','Chemistry','Biology',
+  'Computer Science','Programming','Algorithms','Data Structures','English','Urdu',
+  'Islamiyat','Pakistan Studies','History','Geography','Economics','Accounting',
+  'Business Studies','Marketing','Finance','Sociology','Psychology','Philosophy',
+  'Law','Arabic','French','Quran','Tajweed','Hadith','Tafseer',
 ]
 
 const onlyDigits = (s: string) => s.replace(/[^0-9]/g, '')
 const isFutureOrToday = (d: string) => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const t = new Date(d)
-  t.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0,0,0,0)
+  const t = new Date(d); t.setHours(0,0,0,0)
   return t.getTime() >= today.getTime()
 }
 const isAfter = (a: string, b: string) => new Date(a).getTime() > new Date(b).getTime()
@@ -70,11 +50,7 @@ async function safeJson(r: Response) {
   if (!ct.includes('application/json')) return null
   const t = await r.text()
   if (!t) return null
-  try {
-    return JSON.parse(t)
-  } catch {
-    return null
-  }
+  try { return JSON.parse(t) } catch { return null }
 }
 
 /* -------------------- shared UI blocks -------------------- */
@@ -208,6 +184,7 @@ function Budget({ f, setF }: { f: any; setF: (x: any) => void }) {
             value={f.budgetMin}
             onChange={(e) => setF({ ...f, budgetMin: onlyDigits(e.target.value) })}
             className="flex-1 border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+            required
           />
           <Select value={f.currency} onValueChange={(v) => setF({ ...f, currency: v })}>
             <SelectTrigger className="h-10 w-24 border-0 border-b bg-transparent focus:ring-0">
@@ -231,6 +208,7 @@ function Budget({ f, setF }: { f: any; setF: (x: any) => void }) {
           className={`border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 ${
             invalid ? 'border-red-500 focus-visible:border-red-600' : 'focus-visible:border-primary'
           }`}
+          required
         />
       </div>
 
@@ -362,8 +340,7 @@ function SuccessPanel() {
     <div className="grid place-items-center rounded-2xl border bg-green-50 p-8 text-center">
       <div className="text-2xl font-semibold text-green-700">Request submitted!</div>
       <p className="mt-2 max-w-[60ch] text-sm text-green-700/80">
-        Your request is marked as <span className="font-semibold">pending review</span>. Please hold tight while our admin verifies it.
-        You’ll be notified here when a tutor is assigned or messages you.
+        Your request is marked as <span className="font-semibold">pending review</span>. You’ll be notified here when a tutor is assigned or messages you.
       </p>
       <div className="mt-6 flex gap-3">
         <Link href="/dashboard/student">
@@ -397,9 +374,7 @@ export default function NewReq() {
         const d = (j as any)?.data || {}
         setHasProfileAddress(!!(d.addressLine || d.location) && !!d.countryCode && !!d.stateCode && !!d.cityName)
         setHasProfileContact(!!d.name && !!d.phone)
-      } catch {
-        // ignore
-      }
+      } catch {}
     })()
   }, [])
 
@@ -426,25 +401,18 @@ export default function NewReq() {
         </Breadcrumb>
       </div>
 
-      {/* Global dropdown overlay for better readability */}
-      {overlayOpen && <div className="fixed inset-0 z-40 bg-background/85 md:bg-background/70" />}
-
-      {/* Error panel with Report link */}
+      {/* ✅ Use your ErrorReporter instead of a mailto banner */}
       {lastError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {lastError}{' '}
-          <a
-            href={`mailto:admin@ustaadlink.com?subject=${encodeURIComponent(
-              'Student Portal • Request creation failed',
-            )}&body=${encodeURIComponent(
-              `Path: /dashboard/student/new-request\n\nError:\n${lastError}\n\nSteps to reproduce:`,
-            )}`}
-            className="ml-2 inline-flex items-center rounded border border-red-300 bg-white px-2 py-0.5 text-xs hover:bg-red-100"
-          >
-            Report this to Admin
-          </a>
+        <div className="mb-4">
+          {/* Casting to any to match your component’s Props without changing it */}
+          <ErrorReporter
+            {...({ buttonLabel: 'Send to Technical Team', message: lastError, meta: { path: '/dashboard/student/new-request' } } as any)}
+          />
         </div>
       )}
+
+      {/* Global dropdown overlay for better readability */}
+      {overlayOpen && <div className="fixed inset-0 z-40 bg-background/85 md:bg-background/70" />}
 
       <Card className="overflow-hidden">
         <CardHeader className="border-b bg-gradient-to-b from-primary/5 to-transparent">
@@ -581,11 +549,40 @@ function ProjectHelp({
     onsiteAddress: { countryCode: '', stateCode: '', cityName: '', zip: '', addressLine: '' },
     useProfileContact: true,
     contactName: '',
-    contactPhone: '',
+    contactPhone: '+92',
   })
 
   function onSubmit(e: any) {
     e.preventDefault()
+
+    // minimal required checks on client
+    const missing: string[] = []
+    if (!f.title?.trim()) missing.push('title')
+    if (!f.difficulty) missing.push('difficulty')
+    if (!f.level) missing.push('level')
+    if (!f.language) missing.push('language')
+    if (!f.mode) missing.push('mode')
+    if (!f.budgetMin) missing.push('budgetMin')
+    if (!f.budgetMax) missing.push('budgetMax')
+    if (!f.currency) missing.push('currency')
+
+    if (f.mode === 'onsite' && (!f.useProfileAddress || !hasProfileAddress)) {
+      const a = f.onsiteAddress || {}
+      if (!a.addressLine) missing.push('addressLine')
+      if (!a.countryCode) missing.push('countryCode')
+      if (!a.cityName) missing.push('cityName')
+    }
+
+    if (!f.useProfileContact) {
+      if (!f.contactName?.trim()) missing.push('contactName')
+      if (!f.contactPhone?.trim()) missing.push('contactPhone')
+    }
+
+    if (missing.length) {
+      toast({ title: 'Missing required fields', description: missing.join(', '), variant: 'destructive' })
+      return
+    }
+
     submitRequest(
       {
         type: f.type,
@@ -621,8 +618,7 @@ function ProjectHelp({
   return (
     <form onSubmit={onSubmit} className="grid gap-6">
       <div className="rounded-xl border bg-primary/10 p-3 text-sm text-primary">
-        Our qualified team will recommend the best suited option according to your personalized
-        preferences and budget.
+        Our qualified team will recommend the best suited option according to your personalized preferences and budget.
       </div>
 
       <div className="group">
@@ -631,6 +627,7 @@ function ProjectHelp({
           value={f.title}
           onChange={(e) => setF({ ...f, title: e.target.value })}
           className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+          required
         />
       </div>
 
@@ -643,9 +640,7 @@ function ProjectHelp({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Easy', 'Moderate', 'Hard', 'Very Hard'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -658,9 +653,7 @@ function ProjectHelp({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Matric', 'Intermediate', 'Graduate', 'PhD'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -707,9 +700,7 @@ function ProjectHelp({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Urdu', 'English'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -787,14 +778,14 @@ function ProjectHelp({
                 value={f.contactName}
                 onChange={(e) => setF({ ...f, contactName: e.target.value })}
                 className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+                required
               />
             </div>
             <div className="group">
               <Label>Contact Number</Label>
-              <Input
+              <PhoneInput
                 value={f.contactPhone}
-                onChange={(e) => setF({ ...f, contactPhone: e.target.value })}
-                className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+                onChange={(v: string) => setF({ ...f, contactPhone: v })}
               />
             </div>
           </div>
@@ -843,7 +834,6 @@ function HireTutor({
     stage: '',
     classLevel: '',
     language: 'Urdu',
-    duration: 'Undecided',
     mode: 'online',
     budgetMin: '',
     budgetMax: '',
@@ -853,20 +843,45 @@ function HireTutor({
     onsiteAddress: { countryCode: '', stateCode: '', cityName: '', zip: '', addressLine: '' },
     useProfileContact: true,
     contactName: '',
-    contactPhone: '',
+    contactPhone: '+92',
   })
 
   function onSubmit(e: any) {
     e.preventDefault()
+
+    const missing: string[] = []
+    if (!f.stage) missing.push('stage')
+    if (!f.classLevel?.trim()) missing.push('classLevel')
+    if (!subjects.length) missing.push('subject(s)')
+    if (!f.language) missing.push('language')
+    if (!f.mode) missing.push('mode')
+    if (!f.budgetMin) missing.push('budgetMin')
+    if (!f.budgetMax) missing.push('budgetMax')
+    if (!f.currency) missing.push('currency')
+    if (f.mode === 'onsite' && (!f.useProfileAddress || !hasProfileAddress)) {
+      const a = f.onsiteAddress || {}
+      if (!a.addressLine) missing.push('addressLine')
+      if (!a.countryCode) missing.push('countryCode')
+      if (!a.cityName) missing.push('cityName')
+    }
+    if (!f.useProfileContact) {
+      if (!f.contactName?.trim()) missing.push('contactName')
+      if (!f.contactPhone?.trim()) missing.push('contactPhone')
+    }
+    if (missing.length) {
+      toast({ title: 'Missing required fields', description: missing.join(', '), variant: 'destructive' })
+      return
+    }
+
     submitRequest(
       {
         type: f.type,
         title: `Hire Tutor – ${f.stage || 'General'}`,
         description: `Class ${f.classLevel}; Subjects: ${subjects.join(', ')}`,
         classLevel: f.classLevel,
-        subjects,
+        // ✅ send as "subject" for the API
+        subject: subjects,
         preferredLanguage: f.language,
-        duration: f.duration,
         mode: f.mode,
         budgetMin: f.budgetMin ? Number(f.budgetMin) : undefined,
         budgetMax: f.budgetMax ? Number(f.budgetMax) : undefined,
@@ -902,9 +917,7 @@ function HireTutor({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Toddler', 'School', 'College', 'University', 'O/A levels', 'Exam preparation'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -915,6 +928,7 @@ function HireTutor({
             value={f.classLevel}
             onChange={(e) => setF({ ...f, classLevel: e.target.value })}
             className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+            required
           />
         </div>
       </div>
@@ -930,9 +944,7 @@ function HireTutor({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Urdu', 'English'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -957,26 +969,14 @@ function HireTutor({
             <>
               <Label>Use profile address?</Label>
               <div className="flex gap-3 text-sm">
-                <button
-                  type="button"
-                  className={`rounded-lg border px-3 py-1 ${f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-                  onClick={() => setF({ ...f, useProfileAddress: true })}
-                >
-                  Yes
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-lg border px-3 py-1 ${!f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-                  onClick={() => setF({ ...f, useProfileAddress: false })}
-                >
-                  No, different
-                </button>
+                <button type="button" className={`rounded-lg border px-3 py-1 ${f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+                  onClick={() => setF({ ...f, useProfileAddress: true })}>Yes</button>
+                <button type="button" className={`rounded-lg border px-3 py-1 ${!f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+                  onClick={() => setF({ ...f, useProfileAddress: false })}>No, different</button>
               </div>
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              No saved address found on your profile — please add address details:
-            </span>
+            <span className="text-xs text-muted-foreground">No saved address found on your profile — please add address details:</span>
           )}
           {(!hasProfileAddress || !f.useProfileAddress) && (
             <AddressBlock value={f.onsiteAddress} onChange={(v) => setF({ ...f, onsiteAddress: v })} onOpenChange={setOverlayOpen} />
@@ -987,20 +987,10 @@ function HireTutor({
       <div className="grid gap-3 rounded-xl border p-4">
         <Label>Use profile contact info?</Label>
         <div className="flex gap-3 text-sm">
-          <button
-            type="button"
-            className={`rounded-lg border px-3 py-1 ${f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => setF({ ...f, useProfileContact: true })}
-          >
-            Yes
-          </button>
-          <button
-            type="button"
-            className={`rounded-lg border px-3 py-1 ${!f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => setF({ ...f, useProfileContact: false })}
-          >
-            No, provide contact
-          </button>
+          <button type="button" className={`rounded-lg border px-3 py-1 ${f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+            onClick={() => setF({ ...f, useProfileContact: true })}>Yes</button>
+          <button type="button" className={`rounded-lg border px-3 py-1 ${!f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+            onClick={() => setF({ ...f, useProfileContact: false })}>No, provide contact</button>
         </div>
         {!f.useProfileContact && (
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1010,49 +1000,18 @@ function HireTutor({
                 value={f.contactName}
                 onChange={(e) => setF({ ...f, contactName: e.target.value })}
                 className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+                required
               />
             </div>
             <div className="group">
               <Label>Contact Number</Label>
-              <Input
+              <PhoneInput
                 value={f.contactPhone}
-                onChange={(e) => setF({ ...f, contactPhone: e.target.value })}
-                className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+                onChange={(v: string) => setF({ ...f, contactPhone: v })}
               />
             </div>
           </div>
         )}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="group">
-          <Label>Expected Start Date</Label>
-          <Input
-            type="date"
-            value={f.preferredTimeStart}
-            onChange={(e) => setF({ ...f, preferredTimeStart: e.target.value })}
-            className={`border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 ${
-              f.preferredTimeStart && !isFutureOrToday(f.preferredTimeStart)
-                ? 'border-red-500 focus-visible:border-red-600'
-                : 'focus-visible:border-primary'
-            }`}
-          />
-        </div>
-        <div className="group">
-          <Label>Duration</Label>
-          <Select onOpenChange={setOverlayOpen} value={f.duration} onValueChange={(v) => setF({ ...f, duration: v })}>
-            <SelectTrigger className="h-10 border-0 border-b bg-transparent focus:ring-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="z-50 bg-background shadow-lg">
-              {['1 month', '2 months', '3 months', 'Undecided'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <Budget f={f} setF={setF} />
@@ -1087,7 +1046,6 @@ function HireQuran({
     type: 'HIRE_QURAN',
     proficiency: '',
     language: 'Urdu',
-    duration: 'Undecided',
     preferredTimeStart: '',
     budgetMin: '',
     budgetMax: '',
@@ -1097,18 +1055,42 @@ function HireQuran({
     onsiteAddress: { countryCode: '', stateCode: '', cityName: '', zip: '', addressLine: '' },
     useProfileContact: true,
     contactName: '',
-    contactPhone: '',
+    contactPhone: '+92',
   })
 
   function onSubmit(e: any) {
     e.preventDefault()
+
+    const missing: string[] = []
+    if (!f.proficiency) missing.push('proficiency')
+    if (!f.language) missing.push('language')
+    if (!f.mode) missing.push('mode')
+    if (!f.budgetMin) missing.push('budgetMin')
+    if (!f.budgetMax) missing.push('budgetMax')
+    if (!f.currency) missing.push('currency')
+    if (f.mode === 'onsite' && (!f.useProfileAddress || !hasProfileAddress)) {
+      const a = f.onsiteAddress || {}
+      if (!a.addressLine) missing.push('addressLine')
+      if (!a.countryCode) missing.push('countryCode')
+      if (!a.cityName) missing.push('cityName')
+    }
+    if (!f.useProfileContact) {
+      if (!f.contactName?.trim()) missing.push('contactName')
+      if (!f.contactPhone?.trim()) missing.push('contactPhone')
+    }
+    if (missing.length) {
+      toast({ title: 'Missing required fields', description: missing.join(', '), variant: 'destructive' })
+      return
+    }
+
     submitRequest(
       {
         type: f.type,
         title: `Hire Quran Tutor – ${f.proficiency || 'General'}`,
         description: `Quran Proficiency: ${f.proficiency}`,
+        // ✅ send subject for HIRE_QURAN too
+        subject: f.proficiency ? [`Quran - ${f.proficiency}`] : ['Quran'],
         preferredLanguage: f.language,
-        duration: f.duration,
         preferredTimeStart: f.preferredTimeStart || undefined,
         budgetMin: f.budgetMin ? Number(f.budgetMin) : undefined,
         budgetMax: f.budgetMax ? Number(f.budgetMax) : undefined,
@@ -1144,9 +1126,7 @@ function HireQuran({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Basic (Qaida)', 'Intermediate (Tajweed)', 'Tafseer', 'Hifz'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1159,9 +1139,7 @@ function HireQuran({
             </SelectTrigger>
             <SelectContent className="z-50 bg-background shadow-lg">
               {['Urdu', 'English'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
+                <SelectItem key={x} value={x}>{x}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1181,21 +1159,6 @@ function HireQuran({
                 : 'focus-visible:border-primary'
             }`}
           />
-        </div>
-        <div className="group">
-          <Label>Duration</Label>
-          <Select onOpenChange={setOverlayOpen} value={f.duration} onValueChange={(v) => setF({ ...f, duration: v })}>
-            <SelectTrigger className="h-10 border-0 border-b bg-transparent focus:ring-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="z-50 bg-background shadow-lg">
-              {['1 month', '2 months', '3 months', 'Undecided'].map((x) => (
-                <SelectItem key={x} value={x}>
-                  {x}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -1218,26 +1181,14 @@ function HireQuran({
             <>
               <Label>Use profile address?</Label>
               <div className="flex gap-3 text-sm">
-                <button
-                  type="button"
-                  className={`rounded-lg border px-3 py-1 ${f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-                  onClick={() => setF({ ...f, useProfileAddress: true })}
-                >
-                  Yes
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-lg border px-3 py-1 ${!f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-                  onClick={() => setF({ ...f, useProfileAddress: false })}
-                >
-                  No, different
-                </button>
+                <button type="button" className={`rounded-lg border px-3 py-1 ${f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+                  onClick={() => setF({ ...f, useProfileAddress: true })}>Yes</button>
+                <button type="button" className={`rounded-lg border px-3 py-1 ${!f.useProfileAddress ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+                  onClick={() => setF({ ...f, useProfileAddress: false })}>No, different</button>
               </div>
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              No saved address found on your profile — please add address details:
-            </span>
+            <span className="text-xs text-muted-foreground">No saved address found on your profile — please add address details:</span>
           )}
           {(!hasProfileAddress || !f.useProfileAddress) && (
             <AddressBlock value={f.onsiteAddress} onChange={(v) => setF({ ...f, onsiteAddress: v })} onOpenChange={setOverlayOpen} />
@@ -1248,20 +1199,10 @@ function HireQuran({
       <div className="grid gap-3 rounded-xl border p-4">
         <Label>Use profile contact info?</Label>
         <div className="flex gap-3 text-sm">
-          <button
-            type="button"
-            className={`rounded-lg border px-3 py-1 ${f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => setF({ ...f, useProfileContact: true })}
-          >
-            Yes
-          </button>
-          <button
-            type="button"
-            className={`rounded-lg border px-3 py-1 ${!f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
-            onClick={() => setF({ ...f, useProfileContact: false })}
-          >
-            No, provide contact
-          </button>
+          <button type="button" className={`rounded-lg border px-3 py-1 ${f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+            onClick={() => setF({ ...f, useProfileContact: true })}>Yes</button>
+          <button type="button" className={`rounded-lg border px-3 py-1 ${!f.useProfileContact ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}`}
+            onClick={() => setF({ ...f, useProfileContact: false })}>No, provide contact</button>
         </div>
         {!f.useProfileContact && (
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1271,14 +1212,14 @@ function HireQuran({
                 value={f.contactName}
                 onChange={(e) => setF({ ...f, contactName: e.target.value })}
                 className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+                required
               />
             </div>
             <div className="group">
               <Label>Contact Number</Label>
-              <Input
+              <PhoneInput
                 value={f.contactPhone}
-                onChange={(e) => setF({ ...f, contactPhone: e.target.value })}
-                className="border-0 border-b bg-transparent focus-visible:ring-0 focus-visible:border-b-2 focus-visible:border-primary"
+                onChange={(v: string) => setF({ ...f, contactPhone: v })}
               />
             </div>
           </div>

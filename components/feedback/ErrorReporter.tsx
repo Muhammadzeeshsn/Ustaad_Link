@@ -1,4 +1,3 @@
-// components/feedback/ErrorReporter.tsx
 "use client"
 
 import * as React from "react"
@@ -8,49 +7,50 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 
 type Props = {
+  /** Kept for backwards compatibility, but NOT shown in the textarea */
   defaultMessage?: string
+  /** New: attach technical detail silently */
+  hiddenDetail?: string
   triggerText?: string
   triggerClassName?: string
 }
 
 export default function ErrorReporter({
   defaultMessage = "",
-  triggerText = "Report this to Admin",
+  hiddenDetail,
+  triggerText = "Report to Technical Team",
   triggerClassName,
 }: Props) {
   const { toast } = useToast()
   const [open, setOpen] = React.useState(false)
-  const [message, setMessage] = React.useState(defaultMessage)
-  const [submitting, setSubmitting] = React.useState(false)
+  const [message, setMessage] = React.useState("")
+
+  React.useEffect(() => {
+    if (open) setMessage("") // keep field empty for the user
+  }, [open])
 
   async function submit() {
     if (!message.trim()) {
       toast({ title: "Please describe the issue", variant: "destructive" })
       return
     }
-    setSubmitting(true)
     try {
       const res = await fetch("/api/report-error", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message,
+          message,                                      // user's message (visible)
           pageUrl: typeof window !== "undefined" ? window.location.href : null,
+          // Attach technical details silently. Prefer hiddenDetail, fallback to defaultMessage.
+          detail: hiddenDetail ?? defaultMessage ?? null,
         }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || "Failed to submit")
-      toast({ title: "Thanks!", description: "Your report was sent to the admin." })
+      toast({ title: "Thanks!", description: "Your report was sent to the technical team." })
       setOpen(false)
-      setMessage("")
     } catch (e: any) {
-      toast({
-        title: "Could not send report",
-        description: e?.message || "Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setSubmitting(false)
+      toast({ title: "Could not send report", description: e?.message || "Please try again.", variant: "destructive" })
     }
   }
 
@@ -73,15 +73,11 @@ export default function ErrorReporter({
             rows={6}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="What happened? Steps to reproduce are super helpful."
+            placeholder="What happened? Steps to reproduce help a lot."
           />
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button onClick={submit} disabled={submitting}>
-              {submitting ? "Sending…" : "Send to Admin"}
-            </Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={submit}>Send to Technical Team</Button>
           </div>
         </div>
       </DialogContent>
